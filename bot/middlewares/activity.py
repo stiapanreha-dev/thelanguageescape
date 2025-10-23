@@ -3,7 +3,7 @@ Activity tracking middleware
 Updates user's last_activity timestamp on every interaction
 """
 import logging
-from datetime import datetime
+import datetime as dt_module
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery
@@ -53,7 +53,8 @@ class ActivityMiddleware(BaseMiddleware):
                 user = result.scalar_one_or_none()
 
                 if user:
-                    user.last_activity = datetime.utcnow()
+                    # Use naive datetime (without timezone) to match DB column type
+                    user.last_activity = dt_module.datetime.utcnow()
                     await session.commit()
                     logger.debug(f"Updated activity for user {user_id}")
 
