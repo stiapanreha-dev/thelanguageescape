@@ -36,6 +36,14 @@ else:
     print("Warning: ADMIN_TELEGRAM_ID is not set")
     ADMIN_TELEGRAM_ID = None
 
+# Webhook Configuration
+WEBHOOK_ENABLED = os.getenv('WEBHOOK_ENABLED', 'False').lower() == 'true'
+WEBHOOK_DOMAIN = os.getenv('WEBHOOK_DOMAIN', '')
+WEBHOOK_PATH = os.getenv('WEBHOOK_PATH', '/webhook/telegram')
+WEBHOOK_PORT = int(os.getenv('WEBHOOK_PORT', '8443'))
+WEBAPP_HOST = os.getenv('WEBAPP_HOST', '0.0.0.0')
+WEBHOOK_URL = f"{WEBHOOK_DOMAIN}{WEBHOOK_PATH}" if WEBHOOK_DOMAIN else None
+
 # YooKassa Configuration (Telegram Payments)
 # YooKassa API credentials
 YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID', '1193453')

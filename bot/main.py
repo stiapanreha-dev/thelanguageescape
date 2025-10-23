@@ -11,6 +11,8 @@ from logging.handlers import RotatingFileHandler
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -21,7 +23,12 @@ from bot.config import (
     YOOKASSA_SECRET_KEY,
     LOG_LEVEL,
     LOG_FORMAT,
-    LOGS_PATH
+    LOGS_PATH,
+    WEBHOOK_ENABLED,
+    WEBHOOK_URL,
+    WEBHOOK_PATH,
+    WEBHOOK_PORT,
+    WEBAPP_HOST
 )
 from bot.database.database import init_db, check_db_connection, get_session
 
@@ -193,19 +200,65 @@ async def main():
             data['session'] = session
             return await handler(event, data)
 
-    # Start polling
-    try:
-        logger.info("🔄 Starting polling...")
-        await dp.start_polling(
-            bot,
-            allowed_updates=dp.resolve_used_update_types(),
-            drop_pending_updates=True
+    # Choose between webhook and polling
+    if WEBHOOK_ENABLED and WEBHOOK_URL:
+        # Webhook mode
+        logger.info(f"🌐 Starting webhook mode: {WEBHOOK_URL}")
+
+        # Set webhook
+        await bot.set_webhook(
+            url=WEBHOOK_URL,
+            drop_pending_updates=True,
+            allowed_updates=dp.resolve_used_update_types()
         )
-    except Exception as e:
-        logger.error(f"❌ Error during polling: {e}")
-        raise
-    finally:
-        await bot.session.close()
+
+        # Create aiohttp application
+        app = web.Application()
+
+        # Create webhook handler
+        webhook_handler = SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot
+        )
+
+        # Register webhook handler
+        webhook_handler.register(app, path=WEBHOOK_PATH)
+
+        # Setup application
+        setup_application(app, dp, bot=bot)
+
+        # Run app
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, WEBAPP_HOST, WEBHOOK_PORT)
+
+        try:
+            await site.start()
+            logger.info(f"✅ Webhook server started on {WEBAPP_HOST}:{WEBHOOK_PORT}")
+            logger.info(f"📍 Webhook path: {WEBHOOK_PATH}")
+
+            # Keep the server running
+            await asyncio.Event().wait()
+        except Exception as e:
+            logger.error(f"❌ Error during webhook: {e}")
+            raise
+        finally:
+            await runner.cleanup()
+            await bot.session.close()
+    else:
+        # Polling mode
+        try:
+            logger.info("🔄 Starting polling mode...")
+            await dp.start_polling(
+                bot,
+                allowed_updates=dp.resolve_used_update_types(),
+                drop_pending_updates=True
+            )
+        except Exception as e:
+            logger.error(f"❌ Error during polling: {e}")
+            raise
+        finally:
+            await bot.session.close()
 
 
 if __name__ == "__main__":

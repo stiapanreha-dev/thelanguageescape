@@ -44,6 +44,10 @@ jobs:
             pip install --upgrade pip
             pip install -r requirements.txt
 
+            # Setup webhook (if enabled)
+            echo "🌐 Setting up webhook..."
+            python3 scripts/setup_webhook.py setup || echo "⚠️  Webhook setup skipped (polling mode)"
+
             # Restart bot service
             echo "🔄 Restarting bot service..."
             sudo systemctl restart language-escape-bot
