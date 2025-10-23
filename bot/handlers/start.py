@@ -225,71 +225,55 @@ async def callback_help(callback: CallbackQuery, session: AsyncSession):
     user = result.scalar_one_or_none()
 
     if user and user.has_access:
-        help_text = """
-📚 **How to use the bot**
-
-**Navigation:**
-🎬 /day - Access current day's materials
-📊 /progress - View your progress
-💬 /help - Show this help
-
-**Course Structure:**
-Each day includes:
-• Video briefing (cyberpunk story)
-• PDF brief (vocabulary, grammar, dialogues)
-• 3-4 interactive tasks
-
-**Tasks:**
-✅ **Choice** - Select correct answer (A/B/C/D)
-🎤 **Voice** - Record yourself speaking
-💬 **Dialog** - Interactive conversation
-
-**Progress:**
-Complete all tasks to unlock the next day.
-Collect letters to form the code: **LIBERATION**
-
-**Tips:**
-• Take your time with each task
-• Watch videos carefully for clues
-• Read briefs thoroughly
-• Practice speaking out loud
-
-Need support? Contact @your_support
-"""
+        help_text = (
+            "📚 How to use the bot\n\n"
+            "Navigation:\n"
+            "🎬 /day - Access current day's materials\n"
+            "📊 /progress - View your progress\n"
+            "💬 /help - Show this help\n\n"
+            "Course Structure:\n"
+            "Each day includes:\n"
+            "• Video briefing (cyberpunk story)\n"
+            "• PDF brief (vocabulary, grammar, dialogues)\n"
+            "• 3-4 interactive tasks\n\n"
+            "Tasks:\n"
+            "✅ Choice - Select correct answer (A/B/C/D)\n"
+            "🎤 Voice - Record yourself speaking\n"
+            "💬 Dialog - Interactive conversation\n\n"
+            "Progress:\n"
+            "Complete all tasks to unlock the next day.\n"
+            "Collect letters to form the code: LIBERATION\n\n"
+            "Tips:\n"
+            "• Take your time with each task\n"
+            "• Watch videos carefully for clues\n"
+            "• Read briefs thoroughly\n"
+            "• Practice speaking out loud\n\n"
+            "Need support? Contact @your_support"
+        )
     else:
-        help_text = """
-📚 **About The Language Escape**
+        help_text = (
+            "📚 About The Language Escape\n\n"
+            "What is it?\n"
+            "A 10-day interactive English course in cyberpunk quest format.\n\n"
+            "Who is it for?\n"
+            "Beginners (A1-A2 level), ages 18-45, who want to learn English through gaming and sci-fi.\n\n"
+            "What's included:\n"
+            "🎬 10 days of cinematic videos\n"
+            "📄 PDF briefs with lessons\n"
+            "✍️ Interactive tasks with feedback\n"
+            "🎤 Voice challenges\n"
+            "💬 Dialog simulations\n"
+            "🏆 Certificate upon completion\n\n"
+            "How to start:\n"
+            "1. Use /pay to purchase access\n"
+            "2. Complete payment\n"
+            "3. Start Day 1 immediately!\n\n"
+            f"Price: {COURSE_PRICE} {COURSE_CURRENCY}\n\n"
+            "Questions? Contact @your_support"
+        )
 
-**What is it?**
-A 10-day interactive English course in cyberpunk quest format.
-
-**Who is it for?**
-Beginners (A1-A2 level), ages 18-45, who want to learn English through gaming and sci-fi.
-
-**What's included:**
-🎬 10 days of cinematic videos
-📄 PDF briefs with lessons
-✍️ Interactive tasks with feedback
-🎤 Voice challenges
-💬 Dialog simulations
-🏆 Certificate upon completion
-
-**How to start:**
-1. Use /pay to purchase access
-2. Complete payment
-3. Start Day 1 immediately!
-
-**Price:** {} {}
-
-Questions? Contact @your_support
-""".format(COURSE_PRICE, COURSE_CURRENCY)
-
-    # Use edit_text instead of delete + answer
-    try:
-        await callback.message.edit_text(help_text, parse_mode="Markdown")
-    except Exception as e:
-        # Fallback without markdown if parsing fails
-        await callback.message.edit_text(help_text)
+    # Send as plain text to avoid Markdown parsing issues
+    await callback.message.edit_text(help_text)
     await callback.answer()
 
 
