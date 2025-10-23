@@ -11,15 +11,15 @@ def get_welcome_keyboard() -> InlineKeyboardMarkup:
     """
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"💰 Buy Course - {COURSE_PRICE} {COURSE_CURRENCY}",
+            text=f"💰 Купить курс - {COURSE_PRICE} {COURSE_CURRENCY}",
             callback_data="buy_course"
         )],
         [InlineKeyboardButton(
-            text="📚 Course Info",
+            text="📚 О курсе",
             callback_data="course_info"
         )],
         [InlineKeyboardButton(
-            text="❓ Help",
+            text="❓ Помощь",
             callback_data="show_help"
         )],
     ])
@@ -36,7 +36,7 @@ def get_main_menu_keyboard(current_day: int, has_access: bool) -> InlineKeyboard
         # Current day button
         keyboard_rows.append([
             InlineKeyboardButton(
-                text=f"🎬 Day {current_day}",
+                text=f"🎬 День {current_day}",
                 callback_data=f"start_day_{current_day}"
             )
         ])
@@ -44,7 +44,7 @@ def get_main_menu_keyboard(current_day: int, has_access: bool) -> InlineKeyboard
         # Progress button
         keyboard_rows.append([
             InlineKeyboardButton(
-                text="📊 My Progress",
+                text="📊 Мой прогресс",
                 callback_data="show_progress"
             )
         ])
@@ -53,7 +53,7 @@ def get_main_menu_keyboard(current_day: int, has_access: bool) -> InlineKeyboard
         if current_day > 1:
             keyboard_rows.append([
                 InlineKeyboardButton(
-                    text="📅 All Days",
+                    text="📅 Все дни",
                     callback_data="show_all_days"
                 )
             ])
@@ -62,7 +62,7 @@ def get_main_menu_keyboard(current_day: int, has_access: bool) -> InlineKeyboard
         # No access - show purchase button
         keyboard_rows.append([
             InlineKeyboardButton(
-                text=f"💰 Buy Course - {COURSE_PRICE} {COURSE_CURRENCY}",
+                text=f"💰 Купить курс - {COURSE_PRICE} {COURSE_CURRENCY}",
                 callback_data="buy_course"
             )
         ])
@@ -70,7 +70,7 @@ def get_main_menu_keyboard(current_day: int, has_access: bool) -> InlineKeyboard
     # Help button
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="❓ Help",
+            text="❓ Помощь",
             callback_data="show_help"
         )
     ])
@@ -88,7 +88,7 @@ def get_day_keyboard(day_number: int, has_video: bool = True, has_brief: bool = 
     if has_video:
         keyboard_rows.append([
             InlineKeyboardButton(
-                text="🎬 Watch Video",
+                text="🎬 Смотреть видео",
                 callback_data=f"watch_video_{day_number}"
             )
         ])
@@ -97,7 +97,7 @@ def get_day_keyboard(day_number: int, has_video: bool = True, has_brief: bool = 
     if has_brief:
         keyboard_rows.append([
             InlineKeyboardButton(
-                text="📄 Read Brief",
+                text="📄 Читать брифинг",
                 callback_data=f"read_brief_{day_number}"
             )
         ])
@@ -105,7 +105,7 @@ def get_day_keyboard(day_number: int, has_video: bool = True, has_brief: bool = 
     # Tasks button
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="✅ Start Tasks",
+            text="✅ Начать задания",
             callback_data=f"start_tasks_{day_number}"
         )
     ])
@@ -113,7 +113,7 @@ def get_day_keyboard(day_number: int, has_video: bool = True, has_brief: bool = 
     # Back to menu
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="⬅️ Back to Menu",
+            text="⬅️ В меню",
             callback_data="back_to_menu"
         )
     ])
@@ -157,14 +157,14 @@ def get_task_result_keyboard(
         if task_number < total_tasks:
             keyboard_rows.append([
                 InlineKeyboardButton(
-                    text="➡️ Next Task",
+                    text="➡️ Следующее задание",
                     callback_data=f"next_task_{day}_{task_number + 1}"
                 )
             ])
         else:
             keyboard_rows.append([
                 InlineKeyboardButton(
-                    text="🎉 Finish Day",
+                    text="🎉 Завершить день",
                     callback_data=f"finish_day_{day}"
                 )
             ])
@@ -172,7 +172,7 @@ def get_task_result_keyboard(
         # Try again
         keyboard_rows.append([
             InlineKeyboardButton(
-                text="🔄 Try Again",
+                text="🔄 Попробовать снова",
                 callback_data=f"retry_task_{day}_{task_number}"
             )
         ])
@@ -180,7 +180,7 @@ def get_task_result_keyboard(
     # Back to menu
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="⬅️ Back to Menu",
+            text="⬅️ В меню",
             callback_data="back_to_menu"
         )
     ])
@@ -194,15 +194,15 @@ def get_voice_task_keyboard(day: int, task_number: int) -> InlineKeyboardMarkup:
     """
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text="🎤 Send Voice Message",
+            text="🎤 Отправить голосовое",
             callback_data=f"voice_instructions_{day}_{task_number}"
         )],
         [InlineKeyboardButton(
-            text="⏭️ Skip Task",
+            text="⏭️ Пропустить задание",
             callback_data=f"skip_task_{day}_{task_number}"
         )],
         [InlineKeyboardButton(
-            text="⬅️ Back",
+            text="⬅️ Назад",
             callback_data=f"start_day_{day}"
         )],
     ])
@@ -232,15 +232,15 @@ def get_progress_keyboard(current_day: int) -> InlineKeyboardMarkup:
     """
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"🎬 Continue Day {current_day}",
+            text=f"🎬 Продолжить День {current_day}",
             callback_data=f"start_day_{current_day}"
         )],
         [InlineKeyboardButton(
-            text="📅 View All Days",
+            text="📅 Все дни",
             callback_data="show_all_days"
         )],
         [InlineKeyboardButton(
-            text="⬅️ Back to Menu",
+            text="⬅️ В меню",
             callback_data="back_to_menu"
         )],
     ])
@@ -268,7 +268,7 @@ def get_all_days_keyboard(current_day: int, total_days: int = 10) -> InlineKeybo
                     emoji = "🔒"  # Locked
 
                 row.append(InlineKeyboardButton(
-                    text=f"{emoji} Day {day}",
+                    text=f"{emoji} День {day}",
                     callback_data=f"view_day_{day}" if day <= current_day else f"locked_day_{day}"
                 ))
         keyboard_rows.append(row)
@@ -276,7 +276,7 @@ def get_all_days_keyboard(current_day: int, total_days: int = 10) -> InlineKeybo
     # Back button
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="⬅️ Back to Menu",
+            text="⬅️ В меню",
             callback_data="back_to_menu"
         )
     ])
@@ -294,7 +294,7 @@ def get_day_completion_keyboard(day: int, total_days: int) -> InlineKeyboardMark
         # Next day button
         keyboard_rows.append([
             InlineKeyboardButton(
-                text=f"➡️ Start Day {day + 1}",
+                text=f"➡️ Начать День {day + 1}",
                 callback_data=f"start_day_{day + 1}"
             )
         ])
@@ -302,7 +302,7 @@ def get_day_completion_keyboard(day: int, total_days: int) -> InlineKeyboardMark
     # View progress
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="📊 View Progress",
+            text="📊 Мой прогресс",
             callback_data="show_progress"
         )
     ])
@@ -310,7 +310,7 @@ def get_day_completion_keyboard(day: int, total_days: int) -> InlineKeyboardMark
     # Back to menu
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="⬅️ Back to Menu",
+            text="⬅️ В меню",
             callback_data="back_to_menu"
         )
     ])
@@ -327,7 +327,7 @@ def get_certificate_keyboard(certificate_url: str = None) -> InlineKeyboardMarku
     if certificate_url:
         keyboard_rows.append([
             InlineKeyboardButton(
-                text="📜 Download Certificate",
+                text="📜 Скачать сертификат",
                 url=certificate_url
             )
         ])
@@ -335,7 +335,7 @@ def get_certificate_keyboard(certificate_url: str = None) -> InlineKeyboardMarku
     # Join channel (if available)
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="📢 Join Our Channel",
+            text="📢 Наш канал",
             url="https://t.me/language_escape"  # Update with real channel
         )
     ])
@@ -343,7 +343,7 @@ def get_certificate_keyboard(certificate_url: str = None) -> InlineKeyboardMarku
     # Rate the course
     keyboard_rows.append([
         InlineKeyboardButton(
-            text="⭐ Rate the Course",
+            text="⭐ Оценить курс",
             callback_data="rate_course"
         )
     ])
@@ -357,23 +357,23 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
     """
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text="👥 Users Stats",
+            text="👥 Статистика пользователей",
             callback_data="admin_users"
         )],
         [InlineKeyboardButton(
-            text="💰 Payments Stats",
+            text="💰 Статистика платежей",
             callback_data="admin_payments"
         )],
         [InlineKeyboardButton(
-            text="📊 Progress Stats",
+            text="📊 Статистика прогресса",
             callback_data="admin_progress"
         )],
         [InlineKeyboardButton(
-            text="📢 Send Broadcast",
+            text="📢 Рассылка",
             callback_data="admin_broadcast"
         )],
         [InlineKeyboardButton(
-            text="⬅️ Close",
+            text="⬅️ Закрыть",
             callback_data="admin_close"
         )],
     ])

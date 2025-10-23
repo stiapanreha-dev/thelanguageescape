@@ -79,70 +79,70 @@ VOICE_MAX_DURATION = 30  # seconds
 
 # Cyberpunk Theme Messages
 THEME_MESSAGES = {
-    'welcome': """🔓 **Welcome to NeoVoice, Subject X**
+    'welcome': """🔓 **Добро пожаловать в NeoVoice, Субъект X**
 
-The simulation has you. Your identity is locked behind **{days} encrypted protocols**.
+Симуляция захватила тебя. Твоя личность заблокирована за **{days} зашифрованными протоколами**.
 
-*Corporation ShadowNet* wants to erase you. But there's hope...
+*Корпорация ShadowNet* хочет стереть тебя. Но есть надежда...
 
-💰 **Access Code Price:** {price} {currency}
-⏱️ **Protocol Duration:** {days} days
-🎯 **Mission:** Collect the code **{code}** to break free
+💰 **Цена кода доступа:** {price} {currency}
+⏱️ **Длительность протокола:** {days} дней
+🎯 **Миссия:** Собери код **{code}**, чтобы вырваться на свободу
 
-Will you unlock your voice and escape?""",
+Разблокируешь ли ты свой голос и сбежишь?""",
 
-    'day_start': """⚡ **Day {day}/{total_days}: {title}**
+    'day_start': """⚡ **День {day}/{total_days}: {title}**
 
-Subject {name}, your next protocol is ready.
-The simulation is watching...
+Субъект {name}, твой следующий протокол готов.
+Симуляция наблюдает...
 
-🎥 Watch the briefing
-📄 Read the intelligence
-✅ Complete the challenges
+🎥 Посмотри брифинг
+📄 Прочитай разведданные
+✅ Выполни испытания
 
-**Time to hack the system.**""",
+**Время взломать систему.**""",
 
-    'task_correct': """✅ **Protocol Breached!**
+    'task_correct': """✅ **Протокол взломан!**
 
-Excellent work, {name}! You've unlocked: **{letter}**
+Отличная работа, {name}! Ты разблокировал: **{letter}**
 
-**Progress:** Level {day}/{total_days}
-**Code Fragment:** `{code_fragment}`
+**Прогресс:** Уровень {day}/{total_days}
+**Фрагмент кода:** `{code_fragment}`
 
-Keep going. Freedom is closer.""",
+Продолжай. Свобода ближе.""",
 
-    'task_incorrect': """❌ **System Glitch Detected**
+    'task_incorrect': """❌ **Обнаружен сбой системы**
 
 {hint}
 
-**Attempts remaining:** {attempts}/3
-Try again, Subject {name}. The code is within reach.""",
+**Осталось попыток:** {attempts}/3
+Попробуй снова, Субъект {name}. Код в пределах досягаемости.""",
 
-    'reminder': """⚠️ **Subject {name}, Your Mission Awaits!**
+    'reminder': """⚠️ **Субъект {name}, твоя миссия ждёт!**
 
-You've been inactive for {hours}h.
-**Day {day}** protocol is still locked.
+Ты неактивен уже {hours}ч.
+Протокол **Дня {day}** всё ещё заблокирован.
 
-*The hackers are waiting. Don't let ShadowNet win.*
+*Хакеры ждут. Не дай ShadowNet победить.*
 
-Continue your escape now! 🔓""",
+Продолжи побег прямо сейчас! 🔓""",
 
-    'completion': """🎉 **CODE LIBERATION UNLOCKED!**
+    'completion': """🎉 **КОД ОСВОБОЖДЕНИЯ РАЗБЛОКИРОВАН!**
 
-Congratulations, **{name}**!
+Поздравляем, **{name}**!
 
-You've broken free from the simulation.
-✅ **10/10 Days Complete**
-🔑 **Final Code:** `{code}`
+Ты вырвался из симуляции.
+✅ **10/10 дней пройдено**
+🔑 **Финальный код:** `{code}`
 
-Your certificate of freedom is ready:
-📜 [Download Certificate]
+Твой сертификат свободы готов:
+📜 [Скачать сертификат]
 
-**What's next?**
-🔗 Join our channel: {channel}
-📚 Next course: {next_course}
+**Что дальше?**
+🔗 Подпишись на канал: {channel}
+📚 Следующий курс: {next_course}
 
-You're a true hacker. Welcome to reality."""
+Ты настоящий хакер. Добро пожаловать в реальность."""
 }
 
 # Certificate Configuration
