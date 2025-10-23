@@ -232,9 +232,9 @@ class PaymentService:
                 description=f"Course purchase: {COURSE_NAME}",
                 payment_method="telegram_payments",
                 paid_at=datetime.utcnow(),
-                metadata={
-                    "provider_payment_charge_id": payment_info.provider_payment_charge_id,
-                    "invoice_payload": payment_info.invoice_payload,
+                payment_metadata={
+                    "provider_payment_charge_id": str(payment_info.provider_payment_charge_id) if payment_info.provider_payment_charge_id else None,
+                    "invoice_payload": str(payment_info.invoice_payload) if payment_info.invoice_payload else None,
                 }
             )
 

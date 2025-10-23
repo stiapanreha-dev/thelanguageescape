@@ -3,6 +3,7 @@ Course delivery handlers
 Handles day navigation, material delivery, progress viewing
 """
 import logging
+from datetime import datetime
 from pathlib import Path
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, FSInputFile
@@ -138,10 +139,11 @@ async def callback_locked_day(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("watch_video_"))
-async def callback_watch_video(callback: CallbackQuery, session: AsyncSession, bot: Bot):
+async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
     """
     Send day's video to user
     """
+    bot = callback.bot  # Get bot from callback
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
@@ -198,10 +200,11 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession, b
 
 
 @router.callback_query(F.data.startswith("read_brief_"))
-async def callback_read_brief(callback: CallbackQuery, session: AsyncSession, bot: Bot):
+async def callback_read_brief(callback: CallbackQuery, session: AsyncSession):
     """
     Send day's PDF brief to user
     """
+    bot = callback.bot  # Get bot from callback
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
@@ -337,10 +340,11 @@ Select a day to view:
 
 
 @router.callback_query(F.data.startswith("finish_day_"))
-async def callback_finish_day(callback: CallbackQuery, session: AsyncSession, bot: Bot):
+async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
     """
     Complete a day
     """
+    bot = callback.bot  # Get bot from callback
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
     user_name = callback.from_user.first_name or "Subject X"

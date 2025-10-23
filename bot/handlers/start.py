@@ -216,8 +216,76 @@ Ready to escape? Use /pay to start!
 @router.callback_query(F.data == "show_help")
 async def callback_help(callback: CallbackQuery, session: AsyncSession):
     """Handle help button"""
-    await callback.message.delete()
-    await cmd_help(callback.message, session)
+    user_id = callback.from_user.id
+
+    # Check if user has access
+    result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if user and user.has_access:
+        help_text = """
+📚 **How to use the bot**
+
+**Navigation:**
+🎬 /day - Access current day's materials
+📊 /progress - View your progress
+💬 /help - Show this help
+
+**Course Structure:**
+Each day includes:
+• Video briefing (cyberpunk story)
+• PDF brief (vocabulary, grammar, dialogues)
+• 3-4 interactive tasks
+
+**Tasks:**
+✅ **Choice** - Select correct answer (A/B/C/D)
+🎤 **Voice** - Record yourself speaking
+💬 **Dialog** - Interactive conversation
+
+**Progress:**
+Complete all tasks to unlock the next day.
+Collect letters to form the code: **LIBERATION**
+
+**Tips:**
+• Take your time with each task
+• Watch videos carefully for clues
+• Read briefs thoroughly
+• Practice speaking out loud
+
+Need support? Contact @your_support
+"""
+    else:
+        help_text = """
+📚 **About The Language Escape**
+
+**What is it?**
+A 10-day interactive English course in cyberpunk quest format.
+
+**Who is it for?**
+Beginners (A1-A2 level), ages 18-45, who want to learn English through gaming and sci-fi.
+
+**What's included:**
+🎬 10 days of cinematic videos
+📄 PDF briefs with lessons
+✍️ Interactive tasks with feedback
+🎤 Voice challenges
+💬 Dialog simulations
+🏆 Certificate upon completion
+
+**How to start:**
+1. Use /pay to purchase access
+2. Complete payment
+3. Start Day 1 immediately!
+
+**Price:** {} {}
+
+Questions? Contact @your_support
+""".format(COURSE_PRICE, COURSE_CURRENCY)
+
+    # Use edit_text instead of delete + answer
+    await callback.message.edit_text(help_text, parse_mode="Markdown")
     await callback.answer()
 
 
