@@ -24,9 +24,12 @@ from bot.config import (
 from bot.database.database import init_db, check_db_connection, get_session
 
 # Import handlers
-from bot.handlers import start, payment, course, tasks
+from bot.handlers import start, payment, course, tasks, admin
 from bot.handlers.payment import init_payment_service
 from bot.handlers.tasks import init_task_service
+
+# Import middlewares
+from bot.middlewares.admin import AdminMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -98,13 +101,18 @@ def register_handlers(dp: Dispatcher):
     Args:
         dp: Aiogram Dispatcher
     """
+    # Register middlewares
+    dp.message.middleware(AdminMiddleware())
+    dp.callback_query.middleware(AdminMiddleware())
+
     # Register routers in order of priority
+    dp.include_router(admin.router)  # Admin first
     dp.include_router(start.router)
     dp.include_router(payment.router)
     dp.include_router(course.router)
     dp.include_router(tasks.router)
 
-    logger.info("✅ Handlers registered")
+    logger.info("✅ Handlers and middlewares registered")
 
 
 async def main():
