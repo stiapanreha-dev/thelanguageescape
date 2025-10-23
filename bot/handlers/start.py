@@ -11,12 +11,72 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import COURSE_NAME, COURSE_PRICE, COURSE_CURRENCY, COURSE_DAYS, THEME_MESSAGES
-from bot.database.models import User
+from bot.database.models import User, Payment, PaymentStatus
 from bot.keyboards.inline import get_welcome_keyboard, get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="start")
+
+
+async def check_pending_payments(message: Message, session: AsyncSession, user: User):
+    """
+    Check if user has pending payments and activate if paid
+
+    Args:
+        message: Telegram message
+        session: Database session
+        user: User object
+    """
+    from bot.handlers.payment import payment_service
+
+    if not payment_service:
+        return
+
+    try:
+        # Get pending payments for this user
+        result = await session.execute(
+            select(Payment)
+            .where(Payment.user_id == user.id)
+            .where(Payment.status == PaymentStatus.PENDING)
+            .order_by(Payment.created_at.desc())
+        )
+        pending_payments = result.scalars().all()
+
+        if not pending_payments:
+            return
+
+        logger.info(f"Checking {len(pending_payments)} pending payments for user {user.telegram_id}")
+
+        # Check each pending payment
+        for payment in pending_payments:
+            status, payment_info = await payment_service.check_payment_status(payment.payment_id)
+
+            if status == "succeeded" and payment_info and payment_info.get("paid"):
+                # Activate access
+                user.has_access = True
+                user.current_day = 1
+                user.course_started_at = dt_module.datetime.utcnow()
+
+                # Update payment status
+                payment.status = PaymentStatus.SUCCEEDED
+                payment.paid_at = dt_module.datetime.utcnow()
+
+                await session.commit()
+
+                logger.info(f"✅ Auto-activated access for user {user.telegram_id} via payment {payment.payment_id}")
+
+                # Send success message
+                user_name = message.from_user.first_name or "Субъект X"
+                await payment_service.send_payment_success_message(
+                    chat_id=message.chat.id,
+                    user_name=user_name
+                )
+
+                return  # Found successful payment, stop checking
+
+    except Exception as e:
+        logger.error(f"Error checking pending payments for user {user.telegram_id}: {e}", exc_info=True)
 
 
 @router.message(CommandStart())
@@ -57,8 +117,13 @@ async def cmd_start(message: Message, session: AsyncSession):
                 reply_markup=get_main_menu_keyboard(user.current_day, user.has_access)
             )
         else:
-            # User exists but no access - show purchase option
-            await send_welcome_message(message, first_name, is_new=False)
+            # User exists but no access - check for pending payments
+            await check_pending_payments(message, session, user)
+
+            # If still no access after check, show purchase option
+            await session.refresh(user)
+            if not user.has_access:
+                await send_welcome_message(message, first_name, is_new=False)
 
     else:
         # New user - create record
