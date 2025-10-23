@@ -67,6 +67,10 @@ class PaymentService:
             idempotence_key = str(uuid.uuid4())
 
             # Create payment
+            # Get bot info for return URL
+            bot_info = await self.bot.get_me()
+            bot_username = bot_info.username
+
             payment = YooPayment.create({
                 "amount": {
                     "value": f"{amount:.2f}",
@@ -74,7 +78,7 @@ class PaymentService:
                 },
                 "confirmation": {
                     "type": "redirect",
-                    "return_url": f"https://t.me/{self.bot.username}"  # Return to bot after payment
+                    "return_url": f"https://t.me/{bot_username}"  # Return to bot after payment
                 },
                 "capture": True,  # Auto-capture payment
                 "description": description,
