@@ -35,13 +35,13 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           PROJECT_DIR: ${{ secrets.PROJECT_DIR }}
         run: |
-          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" bash << 'ENDSSH'
             set -e
 
             echo "🚀 Starting deployment..."
 
             # Navigate to project directory
-            cd ${{ secrets.PROJECT_DIR }}
+            cd /root/language_escape_bot
 
             # Pull latest changes
             echo "📥 Pulling latest code from GitHub..."
@@ -75,7 +75,7 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           sleep 5
-          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" bash << 'ENDSSH'
             # Check if service is running
             if systemctl is-active --quiet language-escape-bot; then
               echo "✅ Bot is running successfully"
