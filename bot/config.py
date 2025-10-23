@@ -36,10 +36,13 @@ else:
     print("Warning: ADMIN_TELEGRAM_ID is not set")
     ADMIN_TELEGRAM_ID = None
 
-# YooKassa Configuration
+# YooKassa Configuration (Telegram Payments)
+YOOKASSA_PROVIDER_TOKEN = os.getenv('YOOKASSA_PROVIDER_TOKEN')
+YOOKASSA_TEST_MODE = os.getenv('YOOKASSA_TEST_MODE', 'True').lower() == 'true'
+
+# Optional: Direct YooKassa API credentials
 YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID')
 YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY')
-YOOKASSA_TEST_MODE = os.getenv('YOOKASSA_TEST_MODE', 'True').lower() == 'true'
 
 # PostgreSQL Configuration
 DATABASE_URL = os.getenv('DATABASE_URL')
