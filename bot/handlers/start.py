@@ -195,7 +195,7 @@ Each day includes:
 
 **Progress:**
 Complete all tasks to unlock the next day.
-Collect letters to form the code: **LIBERATION**
+Collect letters to form the secret code
 
 **Tips:**
 • Take your time with each task
@@ -303,7 +303,7 @@ async def callback_help(callback: CallbackQuery, session: AsyncSession):
             "💬 Диалог - Интерактивный разговор\n\n"
             "Прогресс:\n"
             "Выполни все задания, чтобы открыть следующий день.\n"
-            "Собирай буквы кода: LIBERATION\n\n"
+            "Собирай буквы секретного кода для побега\n\n"
             "Советы:\n"
             "• Не торопись с каждым заданием\n"
             "• Смотри видео внимательно - там подсказки\n"
