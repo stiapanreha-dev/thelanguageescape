@@ -53,7 +53,7 @@ async def callback_start_tasks(callback: CallbackQuery, session: AsyncSession):
     tasks = course_service.get_day_tasks(day_number)
 
     if not tasks:
-        await callback.answer("❌ No tasks available for this day", show_alert=True)
+        await callback.answer("❌ Задания для этого дня недоступны", show_alert=True)
         return
 
     # Show first task
@@ -83,12 +83,12 @@ async def show_task(
 
     if not task:
         await message.answer(
-            f"❌ Task {task_number} not found for Day {day_number}"
+            f"❌ Задание {task_number} не найдено для Дня {day_number}"
         )
         return
 
     task_type = task.get('type', 'choice')
-    title = task.get('title', f'Task {task_number}')
+    title = task.get('title', f'Задание {task_number}')
     question = task.get('question', '')
 
     if task_type == 'choice':
@@ -96,13 +96,13 @@ async def show_task(
         options = task.get('options', [])
 
         task_text = f"""
-📝 **Task {task_number}/{len(course_service.get_day_tasks(day_number))}**
+📝 **Задание {task_number}/{len(course_service.get_day_tasks(day_number))}**
 
 **{title}**
 
 {question}
 
-Choose the correct answer:
+Выбери правильный ответ:
 """
 
         keyboard = get_task_keyboard(day_number, task_number, options)
@@ -116,18 +116,18 @@ Choose the correct answer:
     elif task_type == 'voice':
         # Voice task
         task_text = f"""
-🎤 **Voice Task {task_number}/{len(course_service.get_day_tasks(day_number))}**
+🎤 **Голосовое задание {task_number}/{len(course_service.get_day_tasks(day_number))}**
 
 **{title}**
 
 {question}
 
-**Instructions:**
-1. Record yourself saying the phrase
-2. Send as voice message
-3. We'll check your pronunciation
+**Инструкция:**
+1. Запиши себя, произнося фразу
+2. Отправь голосовое сообщение
+3. Мы проверим твоё произношение
 
-Ready? Send a voice message!
+Готов? Отправь голосовое сообщение!
 """
 
         await message.answer(
@@ -139,13 +139,13 @@ Ready? Send a voice message!
     elif task_type == 'dialog':
         # Dialog task
         task_text = f"""
-💬 **Dialog Task {task_number}/{len(course_service.get_day_tasks(day_number))}**
+💬 **Диалог {task_number}/{len(course_service.get_day_tasks(day_number))}**
 
 **{title}**
 
 {question}
 
-Let's have a conversation. Choose your response:
+Давай поговорим. Выбери свой ответ:
 """
 
         # Get dialog options (first step)
@@ -178,7 +178,7 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
     task = course_service.get_task(day_number, task_number)
 
     if not task:
-        await callback.answer("❌ Task not found", show_alert=True)
+        await callback.answer("❌ Задание не найдено", show_alert=True)
         return
 
     # Get user's answer
@@ -306,7 +306,7 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
         callback.data = f"finish_day_{day_number}"
         await callback_finish_day(callback, session)
 
-    await callback.answer("⏭️ Task skipped")
+    await callback.answer("⏭️ Задание пропущено")
 
 
 @router.message(F.voice)
@@ -322,11 +322,11 @@ async def handle_voice_message(message: Message, session: AsyncSession):
     # TODO: Implement Vosk speech recognition
 
     await message.answer(
-        f"🎉 **Great job, {user_name}!**\n\n"
-        f"Your voice message received! ✅\n"
-        f"Duration: {voice.duration}s\n\n"
-        f"Voice recognition will be added soon.\n"
-        f"For now, all voice submissions are accepted! 🎤"
+        f"🎉 **Отлично, {user_name}!**\n\n"
+        f"Голосовое сообщение получено! ✅\n"
+        f"Длительность: {voice.duration}с\n\n"
+        f"Распознавание речи скоро будет добавлено.\n"
+        f"Пока все голосовые сообщения принимаются! 🎤"
     )
 
     logger.info(f"Voice message from user {user_id}, duration: {voice.duration}s")
@@ -338,10 +338,10 @@ async def callback_voice_instructions(callback: CallbackQuery):
     Show voice task instructions
     """
     await callback.answer(
-        "🎤 Record your voice:\n"
-        "1. Press the microphone button\n"
-        "2. Say the phrase clearly\n"
-        "3. Send the recording\n\n"
-        "Tip: Speak slowly and clearly!",
+        "🎤 Запиши голос:\n"
+        "1. Нажми кнопку микрофона\n"
+        "2. Произнеси фразу чётко\n"
+        "3. Отправь запись\n\n"
+        "Совет: Говори медленно и чётко!",
         show_alert=True
     )
