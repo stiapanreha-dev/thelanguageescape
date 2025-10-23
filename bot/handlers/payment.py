@@ -232,11 +232,11 @@ def get_payment_keyboard() -> InlineKeyboardMarkup:
     """Create inline keyboard with payment button"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"💰 Buy Course - {COURSE_PRICE} {COURSE_CURRENCY}",
+            text=f"💰 Купить курс - {COURSE_PRICE} {COURSE_CURRENCY}",
             callback_data="buy_course"
         )],
         [InlineKeyboardButton(
-            text="ℹ️ Course Info",
+            text="ℹ️ О курсе",
             callback_data="course_info"
         )],
     ])
@@ -249,20 +249,20 @@ async def callback_course_info(callback: CallbackQuery):
     info_text = f"""
 📚 **{COURSE_NAME}**
 
-**What you'll get:**
-🎯 {COURSE_DAYS} days of interactive lessons
-🎬 Video content in cyberpunk style
-📄 PDF briefs with vocabulary and grammar
-✍️ Interactive tasks with instant feedback
-🎤 Voice challenges
-💬 Dialog simulations
-🏆 Certificate upon completion
+**Что ты получишь:**
+🎯 {COURSE_DAYS} дней интерактивных уроков
+🎬 Видео в киберпанк стиле
+📄 PDF брифинги со словами и грамматикой
+✍️ Интерактивные задания с мгновенной обратной связью
+🎤 Голосовые челленджи
+💬 Симуляции диалогов
+🏆 Сертификат по завершению
 
-**Price:** {COURSE_PRICE} {COURSE_CURRENCY}
-**Level:** A1-A2 (Beginner)
-**Format:** Self-paced through Telegram bot
+**Цена:** {COURSE_PRICE} {COURSE_CURRENCY}
+**Уровень:** A1-A2 (Начальный)
+**Формат:** В своём темпе через Telegram бот
 
-Ready to escape the simulation?
+Готов сбежать из симуляции?
 """
 
     keyboard = get_payment_keyboard()

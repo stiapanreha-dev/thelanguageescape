@@ -264,24 +264,24 @@ class PaymentService:
             user_name: User's first name
         """
         success_text = f"""
-🎉 **Payment Successful!**
+🎉 **Оплата прошла успешно!**
 
-Welcome to **{COURSE_NAME}**, {user_name}!
+Добро пожаловать в **{COURSE_NAME}**, {user_name}!
 
-✅ You now have full access to all {COURSE_DAYS} days
-🔓 Your journey to freedom begins now
+✅ Теперь у тебя есть полный доступ ко всем {COURSE_DAYS} дням
+🔓 Твой путь к свободе начинается сейчас
 
-**What's next?**
-🎬 Day 1 is ready - click the button below
-📚 Complete tasks to collect the LIBERATION code
-🏆 Earn your certificate of freedom
+**Что дальше?**
+🎬 День 1 готов - нажми кнопку ниже
+📚 Выполняй задания, чтобы собрать код LIBERATION
+🏆 Получи сертификат свободы
 
-The simulation is waiting... Are you ready to escape?
+Симуляция ждёт... Готов сбежать?
 """
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Start Day 1", callback_data="start_day_1")],
-            [InlineKeyboardButton(text="📊 My Progress", callback_data="show_progress")],
+            [InlineKeyboardButton(text="🚀 Начать День 1", callback_data="start_day_1")],
+            [InlineKeyboardButton(text="📊 Мой прогресс", callback_data="show_progress")],
         ])
 
         await self.bot.send_message(
@@ -304,21 +304,21 @@ The simulation is waiting... Are you ready to escape?
             error_message: Optional error description
         """
         failed_text = f"""
-❌ **Payment Failed**
+❌ **Оплата не прошла**
 
-{error_message or "Something went wrong with your payment."}
+{error_message or "Что-то пошло не так с оплатой."}
 
-**What to do:**
-1. Check your card details
-2. Ensure you have sufficient funds
-3. Try again or contact support
+**Что делать:**
+1. Проверь данные карты
+2. Убедись, что достаточно средств
+3. Попробуй снова или свяжись с поддержкой
 
-Need help? Contact @your_support
+Нужна помощь? Напиши в поддержку
 """
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Try Again", callback_data="buy_course")],
-            [InlineKeyboardButton(text="💬 Contact Support", url="https://t.me/your_support")],
+            [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="buy_course")],
+            [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/your_support")],
         ])
 
         await self.bot.send_message(
