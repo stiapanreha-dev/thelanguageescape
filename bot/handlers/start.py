@@ -248,7 +248,7 @@ async def callback_help(callback: CallbackQuery, session: AsyncSession):
             "• Смотри видео внимательно - там подсказки\n"
             "• Читай брифинги тщательно\n"
             "• Практикуй произношение вслух\n\n"
-            "Нужна поддержка? Пиши @your_support"
+            "Нужна поддержка? Напиши в поддержку"
         )
     else:
         help_text = (
@@ -269,11 +269,15 @@ async def callback_help(callback: CallbackQuery, session: AsyncSession):
             "2. Завершить оплату\n"
             "3. Начать День 1 сразу!\n\n"
             f"Цена: {COURSE_PRICE} {COURSE_CURRENCY}\n\n"
-            "Вопросы? Пиши @your_support"
+            "Вопросы? Напиши в поддержку"
         )
 
-    # Send as plain text to avoid Markdown parsing issues
-    await callback.message.edit_text(help_text)
+    # Send as plain text without parse_mode to avoid entity parsing
+    try:
+        await callback.message.edit_text(help_text, parse_mode=None)
+    except Exception as e:
+        logger.error(f"Error editing help message: {e}")
+        await callback.answer("Ошибка отображения справки", show_alert=True)
     await callback.answer()
 
 
