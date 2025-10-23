@@ -285,7 +285,11 @@ Questions? Contact @your_support
 """.format(COURSE_PRICE, COURSE_CURRENCY)
 
     # Use edit_text instead of delete + answer
-    await callback.message.edit_text(help_text, parse_mode="Markdown")
+    try:
+        await callback.message.edit_text(help_text, parse_mode="Markdown")
+    except Exception as e:
+        # Fallback without markdown if parsing fails
+        await callback.message.edit_text(help_text)
     await callback.answer()
 
 
