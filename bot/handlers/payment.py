@@ -1,22 +1,22 @@
 """
-Payment handlers for Telegram bot
-Handles invoice sending, pre-checkout, and successful payment
+Payment handlers for YooKassa API integration
+Handles payment creation and status checking
 """
 import logging
 from aiogram import Router, F, Bot
 from aiogram.types import (
     Message,
     CallbackQuery,
-    PreCheckoutQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton
 )
 from aiogram.filters import Command
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import COURSE_NAME, COURSE_PRICE, COURSE_CURRENCY, COURSE_DAYS
 from bot.services.payment import PaymentService
-from bot.database.database import get_session
+from bot.database.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -27,70 +27,101 @@ router = Router(name="payment")
 payment_service: PaymentService = None
 
 
-def init_payment_service(bot: Bot, provider_token: str):
-    """Initialize payment service with bot and provider token"""
+def init_payment_service(bot: Bot):
+    """
+    Initialize payment service with bot instance
+
+    Args:
+        bot: Bot instance
+    """
     global payment_service
-    payment_service = PaymentService(bot, provider_token)
-    logger.info("Payment service initialized")
+    payment_service = PaymentService(bot)
+    logger.info("✅ Payment service initialized with YooKassa API")
 
 
 @router.message(Command("pay"))
-async def cmd_pay(message: Message):
+async def cmd_pay(message: Message, session: AsyncSession):
     """
-    Handle /pay command - send invoice to user
+    Handle /pay command - create payment and send link
     """
     user_id = message.from_user.id
     chat_id = message.chat.id
-    user_name = message.from_user.first_name or "Subject X"
+    user_name = message.from_user.first_name or "Субъект X"
 
     logger.info(f"User {user_id} ({user_name}) requested payment")
 
     # Check if payment service is initialized
     if not payment_service:
         await message.answer(
-            "⚠️ Payment system is currently unavailable. Please try again later."
+            "⚠️ Платёжная система временно недоступна. Попробуй позже."
         )
         logger.error("Payment service not initialized!")
         return
 
-    # Send invoice
-    try:
-        await payment_service.create_invoice(
-            user_id=user_id,
-            chat_id=chat_id
-        )
+    # Get user from DB
+    result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = result.scalar_one_or_none()
 
-        # Send additional info message
-        info_text = f"""
-💰 **Payment Information**
+    if not user:
+        await message.answer("Используй /start сначала")
+        return
 
-**Course:** {COURSE_NAME}
-**Price:** {COURSE_PRICE} {COURSE_CURRENCY}
-**Duration:** {COURSE_DAYS} days
-
-After payment you'll get:
-✅ Instant access to all {COURSE_DAYS} days
-🎬 Videos, PDFs, and interactive tasks
-🏆 Certificate upon completion
-📱 Progress tracking
-
-**Secure payment** powered by Telegram Payments + YooKassa
-"""
-
+    # Check if user already has access
+    if user.has_access:
         await message.answer(
-            info_text,
-            parse_mode="Markdown"
+            "✅ У тебя уже есть доступ к курсу!\n"
+            f"Текущий день: {user.current_day}/{COURSE_DAYS}\n\n"
+            "Используй /day чтобы продолжить"
         )
+        return
+
+    # Create payment
+    try:
+        payment_id, payment_url = await payment_service.create_payment(
+            user_id=user.id,
+            telegram_id=user_id,
+            amount=COURSE_PRICE
+        )
+
+        if not payment_id or not payment_url:
+            await message.answer(
+                "❌ Ошибка создания платежа. Попробуй ещё раз или напиши в поддержку."
+            )
+            return
+
+        # Send payment link
+        await payment_service.send_payment_link(
+            chat_id=chat_id,
+            payment_url=payment_url,
+            amount=COURSE_PRICE
+        )
+
+        # Save pending payment to DB
+        from bot.database.models import PaymentStatus
+        await payment_service.save_payment_to_db(
+            session=session,
+            user_id=user.id,
+            payment_id=payment_id,
+            amount=COURSE_PRICE,
+            currency=COURSE_CURRENCY,
+            status=PaymentStatus.PENDING,
+            description=f"{COURSE_NAME} - {COURSE_DAYS} дней",
+            metadata={"telegram_id": str(user_id)}
+        )
+
+        logger.info(f"✅ Payment link sent to user {user_id}: {payment_id}")
 
     except Exception as e:
-        logger.error(f"Error sending invoice to user {user_id}: {e}")
+        logger.error(f"Error creating payment for user {user_id}: {e}", exc_info=True)
         await message.answer(
-            "❌ Error creating invoice. Please try again or contact support."
+            "❌ Ошибка создания платежа. Попробуй ещё раз или напиши в поддержку."
         )
 
 
 @router.callback_query(F.data == "buy_course")
-async def callback_buy_course(callback: CallbackQuery):
+async def callback_buy_course(callback: CallbackQuery, session: AsyncSession):
     """
     Handle 'Buy Course' button press
     """
@@ -102,129 +133,142 @@ async def callback_buy_course(callback: CallbackQuery):
     # Check if payment service is initialized
     if not payment_service:
         await callback.answer(
-            "⚠️ Payment system is currently unavailable.",
+            "⚠️ Платёжная система временно недоступна.",
             show_alert=True
         )
         return
 
-    # Send invoice
+    # Get user from DB
+    result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        await callback.answer("Используй /start сначала", show_alert=True)
+        return
+
+    # Check if user already has access
+    if user.has_access:
+        await callback.answer(
+            "✅ У тебя уже есть доступ к курсу!",
+            show_alert=True
+        )
+        return
+
+    # Create payment
     try:
-        await payment_service.create_invoice(
-            user_id=user_id,
-            chat_id=chat_id
+        payment_id, payment_url = await payment_service.create_payment(
+            user_id=user.id,
+            telegram_id=user_id,
+            amount=COURSE_PRICE
         )
 
-        await callback.answer("📧 Invoice sent! Check the message above.")
+        if not payment_id or not payment_url:
+            await callback.answer(
+                "❌ Ошибка создания платежа. Попробуй ещё раз.",
+                show_alert=True
+            )
+            return
+
+        # Send payment link
+        await payment_service.send_payment_link(
+            chat_id=chat_id,
+            payment_url=payment_url,
+            amount=COURSE_PRICE
+        )
+
+        # Save pending payment to DB
+        from bot.database.models import PaymentStatus
+        await payment_service.save_payment_to_db(
+            session=session,
+            user_id=user.id,
+            payment_id=payment_id,
+            amount=COURSE_PRICE,
+            currency=COURSE_CURRENCY,
+            status=PaymentStatus.PENDING,
+            description=f"{COURSE_NAME} - {COURSE_DAYS} дней",
+            metadata={"telegram_id": str(user_id)}
+        )
+
+        await callback.answer("💳 Ссылка на оплату отправлена!")
+        logger.info(f"✅ Payment link sent to user {user_id}: {payment_id}")
 
     except Exception as e:
-        logger.error(f"Error sending invoice to user {user_id}: {e}")
+        logger.error(f"Error creating payment for user {user_id}: {e}", exc_info=True)
         await callback.answer(
-            "❌ Error creating invoice. Please try again.",
+            "❌ Ошибка создания платежа. Попробуй ещё раз.",
             show_alert=True
         )
-
-
-@router.pre_checkout_query()
-async def process_pre_checkout_query(
-    pre_checkout_query: PreCheckoutQuery,
-    session: AsyncSession
-):
-    """
-    Handle pre-checkout query
-    This is called when user presses "Pay" button in invoice
-    """
-    user_id = pre_checkout_query.from_user.id
-
-    logger.info(f"Pre-checkout query from user {user_id}")
-
-    # Check if payment service is initialized
-    if not payment_service:
-        await pre_checkout_query.answer(
-            ok=False,
-            error_message="Payment system is temporarily unavailable."
-        )
-        logger.error("Payment service not initialized during pre-checkout!")
-        return
-
-    # Process pre-checkout validation
-    await payment_service.process_pre_checkout(
-        pre_checkout_query=pre_checkout_query,
-        session=session
-    )
-
-
-@router.message(F.successful_payment)
-async def process_successful_payment(
-    message: Message,
-    session: AsyncSession
-):
-    """
-    Handle successful payment
-    This is called after payment is completed
-    """
-    user_id = message.from_user.id
-    user_name = message.from_user.first_name or "Subject X"
-    chat_id = message.chat.id
-
-    logger.info(f"✅ Successful payment from user {user_id}")
-
-    # Check if payment service is initialized
-    if not payment_service:
-        await message.answer(
-            "⚠️ Payment received but system error occurred. Please contact support."
-        )
-        logger.error("Payment service not initialized during successful payment!")
-        return
-
-    # Process payment and grant access
-    success = await payment_service.process_successful_payment(
-        message=message,
-        session=session
-    )
-
-    if success:
-        # Send success message with cyberpunk style
-        await payment_service.send_payment_success_message(
-            chat_id=chat_id,
-            user_name=user_name
-        )
-
-        logger.info(f"✅ Access granted to user {user_id}")
-
-    else:
-        # Send error message
-        await message.answer(
-            "❌ Payment processed but error granting access. Please contact support with this payment ID:\n"
-            f"`{message.successful_payment.telegram_payment_charge_id}`",
-            parse_mode="Markdown"
-        )
-
-        logger.error(f"Failed to grant access to user {user_id} after successful payment")
 
 
 @router.message(Command("check_payment"))
 async def cmd_check_payment(message: Message, session: AsyncSession):
     """
-    Check user's payment status and access
+    Manual payment status check (for testing and support)
+    Usage: /check_payment <payment_id>
     """
     user_id = message.from_user.id
+    args = message.text.split(maxsplit=1)
 
-    # Check access
-    has_access = await payment_service.check_user_access(
-        session=session,
-        telegram_id=user_id
-    )
+    if len(args) < 2:
+        await message.answer(
+            "Использование: /check_payment <payment_id>\n"
+            "Пример: /check_payment 2d88ff3e-000f-5000-9000-1de86ca83bd5"
+        )
+        return
 
-    if has_access:
-        await message.answer(
-            "✅ You have **active access** to the course!",
-            parse_mode="Markdown"
-        )
-    else:
-        await message.answer(
-            "❌ You don't have access yet. Use /pay to purchase the course.",
-            parse_mode="Markdown"
-        )
+    payment_id = args[1].strip()
+
+    logger.info(f"User {user_id} checking payment: {payment_id}")
+
+    if not payment_service:
+        await message.answer("⚠️ Платёжная система недоступна")
+        return
+
+    try:
+        status, payment_info = await payment_service.check_payment_status(payment_id)
+
+        if status == "succeeded" and payment_info and payment_info.get("paid"):
+            # Grant access
+            success = await payment_service.grant_access_after_payment(
+                session=session,
+                telegram_id=user_id,
+                payment_id=payment_id
+            )
+
+            if success:
+                user_name = message.from_user.first_name or "Субъект X"
+                await payment_service.send_payment_success_message(
+                    chat_id=message.chat.id,
+                    user_name=user_name
+                )
+            else:
+                await message.answer("❌ Ошибка предоставления доступа")
+
+        elif status == "pending" or status == "waiting_for_capture":
+            await message.answer(
+                f"⏳ Платёж в обработке\n"
+                f"Статус: {status}\n"
+                f"ID: `{payment_id}`",
+                parse_mode="Markdown"
+            )
+        elif status == "canceled":
+            await message.answer(
+                f"❌ Платёж отменён\n"
+                f"ID: `{payment_id}`",
+                parse_mode="Markdown"
+            )
+        else:
+            await message.answer(
+                f"ℹ️ Статус платежа: {status}\n"
+                f"ID: `{payment_id}`",
+                parse_mode="Markdown"
+            )
+
+    except Exception as e:
+        logger.error(f"Error checking payment {payment_id}: {e}", exc_info=True)
+        await message.answer("❌ Ошибка проверки платежа")
 
 
 # Helper function to create payment keyboard

@@ -17,7 +17,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from bot.config import (
     TELEGRAM_BOT_TOKEN,
-    YOOKASSA_PROVIDER_TOKEN,
+    YOOKASSA_SHOP_ID,
+    YOOKASSA_SECRET_KEY,
     LOG_LEVEL,
     LOG_FORMAT,
     LOGS_PATH
@@ -88,12 +89,12 @@ async def on_startup(bot: Bot):
         logger.error(f"❌ Database initialization failed: {e}")
         sys.exit(1)
 
-    # Initialize payment service
-    if YOOKASSA_PROVIDER_TOKEN:
-        init_payment_service(bot, YOOKASSA_PROVIDER_TOKEN)
-        logger.info("✅ Payment service initialized")
+    # Initialize payment service (YooKassa API)
+    if YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY:
+        init_payment_service(bot)
+        logger.info("✅ Payment service initialized with YooKassa API")
     else:
-        logger.warning("⚠️  YooKassa Provider Token not set - payments disabled")
+        logger.warning("⚠️  YooKassa credentials not set - payments disabled")
 
     # Initialize task service
     init_task_service()

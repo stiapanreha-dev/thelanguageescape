@@ -37,12 +37,13 @@ else:
     ADMIN_TELEGRAM_ID = None
 
 # YooKassa Configuration (Telegram Payments)
-YOOKASSA_PROVIDER_TOKEN = os.getenv('YOOKASSA_PROVIDER_TOKEN')
+# YooKassa API credentials
+YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID', '1193453')
+YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_PROVIDER_TOKEN', 'test_I3cKZsggMbi7Ct9XX8M1-B1fBblP0EyIj0q7HzS4_QE')
 YOOKASSA_TEST_MODE = os.getenv('YOOKASSA_TEST_MODE', 'True').lower() == 'true'
 
-# Optional: Direct YooKassa API credentials
-YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID')
-YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY')
+# Legacy: Telegram Payments provider token (not used with direct API)
+YOOKASSA_PROVIDER_TOKEN = os.getenv('YOOKASSA_PROVIDER_TOKEN')
 
 # PostgreSQL Configuration
 DATABASE_URL = os.getenv('DATABASE_URL')
