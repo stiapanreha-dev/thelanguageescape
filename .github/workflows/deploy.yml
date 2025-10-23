@@ -1,0 +1,97 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main  # Деплой при push в main
+  workflow_dispatch:  # Ручной запуск через GitHub UI
+
+jobs:
+  deploy:
+    name: Deploy Bot to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          PROJECT_DIR: ${{ secrets.PROJECT_DIR }}
+        run: |
+          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+            set -e
+
+            echo "🚀 Starting deployment..."
+
+            # Navigate to project directory
+            cd ${{ secrets.PROJECT_DIR }}
+
+            # Pull latest changes
+            echo "📥 Pulling latest code from GitHub..."
+            git fetch origin
+            git reset --hard origin/main
+
+            # Activate virtual environment
+            echo "🐍 Activating virtual environment..."
+            source venv/bin/activate
+
+            # Install/update dependencies
+            echo "📦 Installing dependencies..."
+            pip install --upgrade pip
+            pip install -r requirements.txt
+
+            # Restart bot service
+            echo "🔄 Restarting bot service..."
+            sudo systemctl restart language-escape-bot
+
+            # Check status
+            echo "✅ Checking service status..."
+            sudo systemctl status language-escape-bot --no-pager || true
+
+            echo "🎉 Deployment complete!"
+          ENDSSH
+
+      - name: Verify deployment
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          sleep 5
+          ssh -p $VPS_PORT $VPS_USER@$VPS_HOST << 'ENDSSH'
+            # Check if service is running
+            if systemctl is-active --quiet language-escape-bot; then
+              echo "✅ Bot is running successfully"
+              exit 0
+            else
+              echo "❌ Bot failed to start"
+              sudo journalctl -u language-escape-bot -n 50 --no-pager
+              exit 1
+            fi
+          ENDSSH
+
+      - name: Send notification on success
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          # Можно добавить уведомление в Telegram
+
+      - name: Send notification on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          # Можно добавить уведомление в Telegram
