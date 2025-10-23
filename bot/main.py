@@ -32,6 +32,7 @@ from bot.handlers.tasks import init_task_service
 # Import middlewares
 from bot.middlewares.admin import AdminMiddleware
 from bot.middlewares.activity import ActivityMiddleware
+from bot.middlewares.user_logger import user_action_logger
 
 # Import services
 from bot.services.reminders import initialize_reminder_service
@@ -134,10 +135,16 @@ def register_handlers(dp: Dispatcher):
     Args:
         dp: Aiogram Dispatcher
     """
-    # Register middlewares
-    dp.message.middleware(ActivityMiddleware())  # Track activity first
+    # Register middlewares (order matters!)
+    # 1. User action logger (optional, controlled by LOG_USER_ACTIONS)
+    dp.update.middleware(user_action_logger)
+
+    # 2. Activity tracker
+    dp.message.middleware(ActivityMiddleware())
+    dp.callback_query.middleware(ActivityMiddleware())
+
+    # 3. Admin checker
     dp.message.middleware(AdminMiddleware())
-    dp.callback_query.middleware(ActivityMiddleware())  # Track activity first
     dp.callback_query.middleware(AdminMiddleware())
 
     # Register routers in order of priority

@@ -69,6 +69,9 @@ DAILY_RELEASE_TIME = os.getenv('DAILY_RELEASE_TIME', '09:00')
 MAX_REMINDERS = int(os.getenv('MAX_REMINDERS', '3'))
 REMINDER_INTERVAL_HOURS = int(os.getenv('REMINDER_INTERVAL_HOURS', '24'))
 
+# Logging Configuration
+LOG_USER_ACTIONS = os.getenv('LOG_USER_ACTIONS', 'True').lower() in ('true', '1', 'yes', 'on')
+
 # Tasks Configuration
 MAX_TASK_ATTEMPTS = 3
 VOICE_MIN_DURATION = 1  # seconds
