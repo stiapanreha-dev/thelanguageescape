@@ -36,7 +36,7 @@ async def cmd_day(message: Message, session: AsyncSession):
 
     if not has_access:
         await message.answer(
-            "❌ You don't have access yet. Use /pay to purchase the course.",
+            "❌ У тебя пока нет доступа. Используй /pay для покупки курса.",
             parse_mode="Markdown"
         )
         return
@@ -68,7 +68,7 @@ async def show_day(
 
     if not has_access:
         await message.answer(
-            f"🔒 Day {day_number} is locked. Complete Day {day_number - 1} first!",
+            f"🔒 День {day_number} заблокирован. Сначала пройди День {day_number - 1}!",
             parse_mode="Markdown"
         )
         return
@@ -133,7 +133,7 @@ async def callback_locked_day(callback: CallbackQuery):
     day_number = int(callback.data.split("_")[-1])
 
     await callback.answer(
-        f"🔒 Day {day_number} is locked. Complete previous days first!",
+        f"🔒 День {day_number} заблокирован. Сначала пройди предыдущие дни!",
         show_alert=True
     )
 
@@ -171,7 +171,7 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
             return
 
         await callback.message.answer(
-            f"🎬 **Day {day_number} Video**\n\nWatch carefully for clues...",
+            f"🎬 **Видео Дня {day_number}**\n\nСмотри внимательно, ищи подсказки...",
             parse_mode="Markdown"
         )
 
@@ -232,7 +232,7 @@ async def callback_read_brief(callback: CallbackQuery, session: AsyncSession):
             return
 
         await callback.message.answer(
-            f"📄 **Day {day_number} Brief**\n\nRead carefully and learn!",
+            f"📄 **Брифинг Дня {day_number}**\n\nЧитай внимательно и учись!",
             parse_mode="Markdown"
         )
 
@@ -270,7 +270,7 @@ async def cmd_progress(message: Message, session: AsyncSession):
     progress_data = await course_service.get_user_progress(session, user_id)
 
     if not progress_data:
-        await message.answer("You haven't started the course yet. Use /start")
+        await message.answer("Ты ещё не начал курс. Используй /start")
         return
 
     # Format progress message
@@ -318,16 +318,16 @@ async def callback_show_all_days(callback: CallbackQuery, session: AsyncSession)
     current_day = progress_data.get('current_day', 1)
 
     all_days_text = f"""
-📅 **All Days Overview**
+📅 **Обзор всех дней**
 
-Current: Day {current_day}/{COURSE_DAYS}
-Completed: {progress_data.get('completed_days', 0)} days
+Текущий: День {current_day}/{COURSE_DAYS}
+Пройдено: {progress_data.get('completed_days', 0)} дней
 
-✅ - Completed
-▶️ - Current
-🔒 - Locked
+✅ - Пройден
+▶️ - Текущий
+🔒 - Заблокирован
 
-Select a day to view:
+Выбери день для просмотра:
 """
 
     await callback.message.edit_text(
@@ -364,21 +364,21 @@ async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
 
     # Success message
     completion_text = f"""
-🎉 **Day {day_number} Complete!**
+🎉 **День {day_number} пройден!**
 
-Excellent work, {user_name}!
+Отличная работа, {user_name}!
 
-🔑 **Code Fragment Unlocked:** `{letter}`
-📊 **Progress:** {progress_data['liberation_code']}
-⏭️ **Level:** {day_number}/{COURSE_DAYS}
+🔑 **Фрагмент кода разблокирован:** `{letter}`
+📊 **Прогресс:** {progress_data['liberation_code']}
+⏭️ **Уровень:** {day_number}/{COURSE_DAYS}
 
 """
 
     if day_number < COURSE_DAYS:
-        completion_text += f"\n✨ **Day {day_number + 1} is now unlocked!**\nReady to continue?"
+        completion_text += f"\n✨ **День {day_number + 1} теперь доступен!**\nГотов продолжить?"
     else:
         # Final day - generate certificate!
-        completion_text += f"\n🏆 **LIBERATION CODE COMPLETE!**\n`{progress_data['liberation_code']}`\n\nYou've escaped the simulation! 🎊\n\n⏳ Generating your certificate..."
+        completion_text += f"\n🏆 **КОД ОСВОБОЖДЕНИЯ СОБРАН!**\n`{progress_data['liberation_code']}`\n\nТы сбежал из симуляции! 🎊\n\n⏳ Генерируем твой сертификат..."
 
     from bot.keyboards.inline import get_day_completion_keyboard
     keyboard = get_day_completion_keyboard(day_number, COURSE_DAYS)
@@ -456,24 +456,24 @@ async def generate_and_send_certificate(
             chat_id=message.chat.id,
             document=cert_file,
             caption=f"""
-📜 **Certificate of Completion**
+📜 **Сертификат о прохождении**
 
-Congratulations, **{user_name}**!
+Поздравляем, **{user_name}**!
 
-You've successfully completed **The Language Escape** course!
+Ты успешно завершил курс **The Language Escape**!
 
-🔑 Liberation Code: `{progress_data.get('liberation_code', 'LIBERATION')}`
-✅ Accuracy: {progress_data.get('accuracy', 100):.1f}%
-📅 Completed: {progress_data.get('course_completed').strftime('%d.%m.%Y') if progress_data.get('course_completed') else 'Today'}
+🔑 Код освобождения: `{progress_data.get('liberation_code', 'LIBERATION')}`
+✅ Точность: {progress_data.get('accuracy', 100):.1f}%
+📅 Завершено: {progress_data.get('course_completed').strftime('%d.%m.%Y') if progress_data.get('course_completed') else 'Сегодня'}
 
-**What's next?**
-📢 Join our channel for more courses!
-🌟 Share your achievement!
+**Что дальше?**
+📢 Присоединяйся к нашему каналу для новых курсов!
+🌟 Поделись своим достижением!
 """,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/language_escape")],
-                [InlineKeyboardButton(text="🔄 Share Certificate", switch_inline_query="I completed The Language Escape! 🎉")],
+                [InlineKeyboardButton(text="📢 Присоединиться к каналу", url="https://t.me/language_escape")],
+                [InlineKeyboardButton(text="🔄 Поделиться сертификатом", switch_inline_query="Я прошёл The Language Escape! 🎉")],
             ])
         )
 
