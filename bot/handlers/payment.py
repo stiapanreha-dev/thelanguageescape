@@ -265,7 +265,17 @@ async def callback_course_info(callback: CallbackQuery):
 Готов сбежать из симуляции?
 """
 
-    keyboard = get_payment_keyboard()
+    # Separate keyboard for course info screen (with Back button)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"💰 Купить курс - {COURSE_PRICE} {COURSE_CURRENCY}",
+            callback_data="buy_course"
+        )],
+        [InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="back_to_welcome"
+        )],
+    ])
 
     try:
         await callback.message.edit_text(
@@ -275,6 +285,50 @@ async def callback_course_info(callback: CallbackQuery):
         )
     except Exception:
         # Ignore if message is the same (user clicked button again)
+        pass
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_welcome")
+async def callback_back_to_welcome(callback: CallbackQuery):
+    """Go back to welcome screen"""
+    from bot.config import THEME_MESSAGES
+
+    user_name = callback.from_user.first_name or "Субъект X"
+
+    welcome_text = THEME_MESSAGES['welcome'].format(
+        days=COURSE_DAYS,
+        price=COURSE_PRICE,
+        currency=COURSE_CURRENCY,
+        code="LIBERATION"
+    )
+
+    # Replace Subject X with actual name
+    welcome_text = welcome_text.replace("Субъект X", user_name)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"💰 Купить курс - {COURSE_PRICE} {COURSE_CURRENCY}",
+            callback_data="buy_course"
+        )],
+        [InlineKeyboardButton(
+            text="📚 О курсе",
+            callback_data="course_info"
+        )],
+        [InlineKeyboardButton(
+            text="❓ Помощь",
+            callback_data="show_help"
+        )],
+    ])
+
+    try:
+        await callback.message.edit_text(
+            welcome_text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    except Exception:
         pass
 
     await callback.answer()
