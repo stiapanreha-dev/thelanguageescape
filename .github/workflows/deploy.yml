@@ -15,27 +15,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.0
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "Host *" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile=/dev/null" >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
-
-      - name: Deploy to VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          PROJECT_DIR: ${{ secrets.PROJECT_DIR }}
-        run: |
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" bash << 'ENDSSH'
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
             set -e
 
             echo "🚀 Starting deployment..."
@@ -61,31 +48,21 @@ jobs:
             echo "🔄 Restarting bot service..."
             sudo systemctl restart language-escape-bot
 
+            # Wait for service to start
+            sleep 3
+
             # Check status
             echo "✅ Checking service status..."
-            sudo systemctl status language-escape-bot --no-pager || true
-
-            echo "🎉 Deployment complete!"
-          ENDSSH
-
-      - name: Verify deployment
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-        run: |
-          sleep 5
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" bash << 'ENDSSH'
-            # Check if service is running
             if systemctl is-active --quiet language-escape-bot; then
               echo "✅ Bot is running successfully"
-              exit 0
+              sudo systemctl status language-escape-bot --no-pager || true
             else
               echo "❌ Bot failed to start"
               sudo journalctl -u language-escape-bot -n 50 --no-pager
               exit 1
             fi
-          ENDSSH
+
+            echo "🎉 Deployment complete!"
 
       - name: Send notification on success
         if: success()
