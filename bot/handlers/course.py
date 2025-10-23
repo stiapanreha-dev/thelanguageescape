@@ -161,6 +161,13 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession, b
             logger.error(f"Video file not found: {full_path}")
             return
 
+        # Check file size (Telegram limit: 50MB for videos)
+        file_size = full_path.stat().st_size
+        if file_size > 50 * 1024 * 1024:  # 50MB in bytes
+            await callback.answer("❌ Video file too large (>50MB)", show_alert=True)
+            logger.error(f"Video file too large: {file_size} bytes")
+            return
+
         await callback.message.answer(
             f"🎬 **Day {day_number} Video**\n\nWatch carefully for clues...",
             parse_mode="Markdown"
@@ -177,11 +184,17 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession, b
         await course_service.mark_video_watched(session, user_id, day_number)
 
         await callback.answer("✅ Video sent!")
-        logger.info(f"Video sent to user {user_id} for day {day_number}")
+        logger.info(f"✅ Video sent to user {user_id} for day {day_number}")
 
+    except FileNotFoundError as e:
+        logger.error(f"Video file not found for day {day_number}: {e}")
+        await callback.answer("❌ Video file not available", show_alert=True)
+    except PermissionError as e:
+        logger.error(f"Permission denied reading video file: {e}")
+        await callback.answer("❌ Cannot access video file", show_alert=True)
     except Exception as e:
-        logger.error(f"Error sending video: {e}")
-        await callback.answer("❌ Error sending video", show_alert=True)
+        logger.error(f"Error sending video to user {user_id}, day {day_number}: {e}", exc_info=True)
+        await callback.answer("❌ Error sending video. Please try again later.", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("read_brief_"))
@@ -208,6 +221,13 @@ async def callback_read_brief(callback: CallbackQuery, session: AsyncSession, bo
             logger.error(f"Brief file not found: {full_path}")
             return
 
+        # Check file size (Telegram limit: 50MB for documents)
+        file_size = full_path.stat().st_size
+        if file_size > 50 * 1024 * 1024:  # 50MB in bytes
+            await callback.answer("❌ Brief file too large (>50MB)", show_alert=True)
+            logger.error(f"Brief file too large: {file_size} bytes")
+            return
+
         await callback.message.answer(
             f"📄 **Day {day_number} Brief**\n\nRead carefully and learn!",
             parse_mode="Markdown"
@@ -224,11 +244,17 @@ async def callback_read_brief(callback: CallbackQuery, session: AsyncSession, bo
         await course_service.mark_brief_read(session, user_id, day_number)
 
         await callback.answer("✅ Brief sent!")
-        logger.info(f"Brief sent to user {user_id} for day {day_number}")
+        logger.info(f"✅ Brief sent to user {user_id} for day {day_number}")
 
+    except FileNotFoundError as e:
+        logger.error(f"Brief file not found for day {day_number}: {e}")
+        await callback.answer("❌ Brief file not available", show_alert=True)
+    except PermissionError as e:
+        logger.error(f"Permission denied reading brief file: {e}")
+        await callback.answer("❌ Cannot access brief file", show_alert=True)
     except Exception as e:
-        logger.error(f"Error sending brief: {e}")
-        await callback.answer("❌ Error sending brief", show_alert=True)
+        logger.error(f"Error sending brief to user {user_id}, day {day_number}: {e}", exc_info=True)
+        await callback.answer("❌ Error sending brief. Please try again later.", show_alert=True)
 
 
 @router.message(Command("progress"))
@@ -413,6 +439,15 @@ async def generate_and_send_certificate(
 
         cert_file = FSInputFile(str(cert_path))
 
+        # Check certificate file size
+        cert_size = cert_path.stat().st_size
+        if cert_size > 10 * 1024 * 1024:  # 10MB limit for safety
+            logger.error(f"Certificate file too large: {cert_size} bytes")
+            await message.answer(
+                "❌ Certificate file too large. Please contact support."
+            )
+            return
+
         await bot.send_document(
             chat_id=message.chat.id,
             document=cert_file,
@@ -461,8 +496,18 @@ You've successfully completed **The Language Escape** course!
 
         logger.info(f"✅ Certificate sent to user {user_id}")
 
-    except Exception as e:
-        logger.error(f"Error sending certificate to user {user_id}: {e}")
+    except FileNotFoundError as e:
+        logger.error(f"Certificate file not found for user {user_id}: {e}")
         await message.answer(
-            "❌ Error sending certificate. Please contact support."
+            "❌ Certificate not found. Please contact support."
+        )
+    except PermissionError as e:
+        logger.error(f"Permission denied accessing certificate: {e}")
+        await message.answer(
+            "❌ Cannot access certificate. Please contact support."
+        )
+    except Exception as e:
+        logger.error(f"Error sending certificate to user {user_id}: {e}", exc_info=True)
+        await message.answer(
+            "❌ Error sending certificate. Please try again later or contact support."
         )
