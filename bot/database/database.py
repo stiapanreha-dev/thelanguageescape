@@ -72,7 +72,8 @@ async def check_db_connection():
     """Check database connection"""
     try:
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            from sqlalchemy import text
+            await conn.execute(text("SELECT 1"))
         print("✅ Database connection successful")
         return True
     except Exception as e:
