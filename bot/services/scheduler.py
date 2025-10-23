@@ -47,6 +47,88 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"Error in reminder check job: {e}")
 
+    async def unlock_next_days_job(self):
+        """
+        Unlock next day for users who completed previous day
+        Runs at 9:00 AM Moscow time (UTC+3)
+        Sends notification to users about new day availability
+        """
+        try:
+            logger.info("🔓 Running next day unlock job...")
+
+            from bot.database.models import User, Progress
+            from bot.services.reminders import reminder_service
+            from sqlalchemy import select, and_
+
+            async with async_session_maker() as session:
+                # Get users who:
+                # - Have access
+                # - Haven't completed course
+                # - Completed their current day tasks
+                result = await session.execute(
+                    select(User).where(
+                        and_(
+                            User.has_access == True,
+                            User.course_completed_at.is_(None),
+                            User.current_day > 0,
+                            User.current_day < 10  # COURSE_DAYS
+                        )
+                    )
+                )
+                users = result.scalars().all()
+
+                unlocked_count = 0
+                for user in users:
+                    # Check if current day is completed
+                    progress_result = await session.execute(
+                        select(Progress).where(
+                            and_(
+                                Progress.user_id == user.id,
+                                Progress.day_number == user.current_day,
+                                Progress.tasks_completed == True
+                            )
+                        )
+                    )
+                    progress = progress_result.scalar_one_or_none()
+
+                    if progress and user.current_day < 10:  # COURSE_DAYS
+                        # Unlock next day
+                        next_day = user.current_day + 1
+                        user.current_day = next_day
+                        unlocked_count += 1
+
+                        # Send notification to user
+                        if reminder_service and reminder_service.bot:
+                            try:
+                                notification = f"""
+🌅 **Good Morning, Subject X!**
+
+**Day {next_day} is now unlocked!**
+
+You've completed Day {next_day - 1} yesterday. The simulation continues...
+
+🔓 **Your next mission awaits**
+🔑 **Liberation Code Progress:** `{user.liberation_code}`
+
+Ready to continue? /day
+"""
+                                await reminder_service.bot.send_message(
+                                    chat_id=user.telegram_id,
+                                    text=notification,
+                                    parse_mode="Markdown"
+                                )
+                                logger.info(f"Sent unlock notification to user {user.telegram_id}")
+                            except Exception as e:
+                                logger.error(f"Error sending unlock notification to {user.telegram_id}: {e}")
+
+                        logger.info(f"Unlocked day {next_day} for user {user.telegram_id}")
+
+                await session.commit()
+                logger.info(f"✅ Unlocked next day for {unlocked_count} users")
+
+        except Exception as e:
+            logger.error(f"Error in unlock next days job: {e}", exc_info=True)
+
     async def daily_cleanup_job(self):
         """
         Daily cleanup job
@@ -80,7 +162,16 @@ class SchedulerService:
             replace_existing=True
         )
 
-        # 2. Daily cleanup at 3:00 AM
+        # 2. Unlock next day at 9:00 AM Moscow time
+        self.scheduler.add_job(
+            self.unlock_next_days_job,
+            trigger=CronTrigger(hour=9, minute=0),
+            id='unlock_next_days',
+            name='Unlock next day for users who completed previous day',
+            replace_existing=True
+        )
+
+        # 3. Daily cleanup at 3:00 AM
         self.scheduler.add_job(
             self.daily_cleanup_job,
             trigger=CronTrigger(hour=3, minute=0),
