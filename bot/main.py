@@ -6,6 +6,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -36,14 +37,29 @@ from bot.middlewares.activity import ActivityMiddleware
 from bot.services.reminders import initialize_reminder_service
 from bot.services.scheduler import scheduler_service
 
-# Configure logging
+# Configure logging with rotation
+# Ensure logs directory exists
+LOGS_PATH.mkdir(parents=True, exist_ok=True)
+
+# Create rotating file handler (max 10MB per file, keep 5 backups)
+file_handler = RotatingFileHandler(
+    LOGS_PATH / 'bot.log',
+    maxBytes=10 * 1024 * 1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setLevel(getattr(logging, LOG_LEVEL))
+file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+# Console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(getattr(logging, LOG_LEVEL))
+console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+# Configure root logger
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
-    format=LOG_FORMAT,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOGS_PATH / 'bot.log', encoding='utf-8')
-    ]
+    handlers=[console_handler, file_handler]
 )
 
 logger = logging.getLogger(__name__)
