@@ -1,5 +1,6 @@
 # Documentation and materials (excluded from repo)
 docs/
+CLAUDE.md
 
 # Environment variables
 .env
