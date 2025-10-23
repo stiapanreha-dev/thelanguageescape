@@ -365,18 +365,17 @@ class CourseService:
         user = progress_data['user']
 
         message = f"""
-📊 **Your Progress**
+📊 **Твой прогресс**
 
-**Name:** {user.first_name}
-**Current Day:** {progress_data['current_day']}/{COURSE_DAYS}
-**Completed Days:** {progress_data['completed_days']}
+**Имя:** Субъект X
+**Текущий день:** {progress_data['current_day']}/{COURSE_DAYS}
+**Пройдено дней:** {progress_data['completed_days']}
 
-**Liberation Code:** `{progress_data['liberation_code'] or '___________'}`
-**Target:** `{LIBERATION_CODE}`
+**Код освобождения:** `{progress_data['liberation_code'] or '___________'}`
 
-**Statistics:**
-✅ Tasks Completed: {progress_data['completed_tasks']}/{progress_data['total_tasks']}
-🎯 Accuracy: {progress_data['accuracy']:.1f}%
+**Статистика:**
+✅ Выполнено заданий: {progress_data['completed_tasks']}/{progress_data['total_tasks']}
+🎯 Точность: {progress_data['accuracy']:.1f}%
 
 """
 
