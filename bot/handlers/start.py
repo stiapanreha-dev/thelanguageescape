@@ -3,6 +3,7 @@ Start and basic command handlers
 Registration, welcome messages, help
 """
 import logging
+import datetime as dt_module
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandStart
@@ -39,7 +40,7 @@ async def cmd_start(message: Message, session: AsyncSession):
 
     if user:
         # Existing user
-        user.last_activity = message.date
+        # Don't update last_activity here - ActivityMiddleware handles it
         user.first_name = first_name
         user.last_name = last_name
         user.username = username
