@@ -214,10 +214,10 @@ Ready to escape? Use /pay to start!
 
 
 @router.callback_query(F.data == "show_help")
-async def callback_help(callback: CallbackQuery):
+async def callback_help(callback: CallbackQuery, session: AsyncSession):
     """Handle help button"""
     await callback.message.delete()
-    await cmd_help(callback.message, callback.message.chat.id)
+    await cmd_help(callback.message, session)
     await callback.answer()
 
 
