@@ -85,8 +85,8 @@ class Payment(Base):
     payment_method = Column(String(50), nullable=True)
     paid_at = Column(DateTime, nullable=True)
 
-    # Metadata
-    metadata = Column(JSON, nullable=True)
+    # Payment metadata (extra info)
+    payment_metadata = Column(JSON, nullable=True)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
