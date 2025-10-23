@@ -311,7 +311,7 @@ Select a day to view:
 
 
 @router.callback_query(F.data.startswith("finish_day_"))
-async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
+async def callback_finish_day(callback: CallbackQuery, session: AsyncSession, bot: Bot):
     """
     Complete a day
     """
@@ -347,7 +347,8 @@ Excellent work, {user_name}!
     if day_number < COURSE_DAYS:
         completion_text += f"\n✨ **Day {day_number + 1} is now unlocked!**\nReady to continue?"
     else:
-        completion_text += f"\n🏆 **LIBERATION CODE COMPLETE!**\n`{progress_data['liberation_code']}`\n\nYou've escaped the simulation! 🎊"
+        # Final day - generate certificate!
+        completion_text += f"\n🏆 **LIBERATION CODE COMPLETE!**\n`{progress_data['liberation_code']}`\n\nYou've escaped the simulation! 🎊\n\n⏳ Generating your certificate..."
 
     from bot.keyboards.inline import get_day_completion_keyboard
     keyboard = get_day_completion_keyboard(day_number, COURSE_DAYS)
@@ -358,4 +359,110 @@ Excellent work, {user_name}!
         reply_markup=keyboard
     )
 
+    # Generate certificate for final day
+    if day_number == COURSE_DAYS:
+        await generate_and_send_certificate(callback.message, session, user_id, user_name, bot)
+
     await callback.answer("🎉 Day completed!", show_alert=False)
+
+
+async def generate_and_send_certificate(
+    message: Message,
+    session: AsyncSession,
+    user_id: int,
+    user_name: str,
+    bot: Bot
+):
+    """
+    Generate and send certificate to user
+
+    Args:
+        message: Message to reply to
+        session: DB session
+        user_id: User telegram ID
+        user_name: User name
+        bot: Bot instance
+    """
+    from bot.services.certificates import generate_user_certificate
+    from bot.database.models import Certificate, User
+    from sqlalchemy import select
+
+    try:
+        # Get user progress data
+        progress_data = await course_service.get_user_progress(session, user_id)
+
+        # Generate certificate
+        cert_path = await generate_user_certificate(
+            user_name=user_name,
+            telegram_id=user_id,
+            completion_date=progress_data.get('course_completed'),
+            total_days=10,
+            accuracy=progress_data.get('accuracy', 100.0),
+            liberation_code=progress_data.get('liberation_code', 'LIBERATION')
+        )
+
+        if not cert_path or not cert_path.exists():
+            logger.error(f"Certificate generation failed for user {user_id}")
+            await message.answer(
+                "❌ Error generating certificate. Please contact support."
+            )
+            return
+
+        # Send certificate
+        from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
+
+        cert_file = FSInputFile(str(cert_path))
+
+        await bot.send_document(
+            chat_id=message.chat.id,
+            document=cert_file,
+            caption=f"""
+📜 **Certificate of Completion**
+
+Congratulations, **{user_name}**!
+
+You've successfully completed **The Language Escape** course!
+
+🔑 Liberation Code: `{progress_data.get('liberation_code', 'LIBERATION')}`
+✅ Accuracy: {progress_data.get('accuracy', 100):.1f}%
+📅 Completed: {progress_data.get('course_completed').strftime('%d.%m.%Y') if progress_data.get('course_completed') else 'Today'}
+
+**What's next?**
+📢 Join our channel for more courses!
+🌟 Share your achievement!
+""",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/language_escape")],
+                [InlineKeyboardButton(text="🔄 Share Certificate", switch_inline_query="I completed The Language Escape! 🎉")],
+            ])
+        )
+
+        # Save certificate info to database
+        result = await session.execute(
+            select(User).where(User.telegram_id == user_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if user:
+            certificate = Certificate(
+                user_id=user.id,
+                certificate_code=progress_data.get('liberation_code', 'LIBERATION'),
+                file_path=str(cert_path),
+                completion_date=progress_data.get('course_completed') or datetime.utcnow(),
+                total_days=10,
+                final_code=progress_data.get('liberation_code', 'LIBERATION'),
+                total_tasks=progress_data.get('total_tasks', 0),
+                correct_answers=progress_data.get('correct_answers', 0),
+                accuracy=progress_data.get('accuracy', 0.0)
+            )
+            session.add(certificate)
+            await session.commit()
+
+        logger.info(f"✅ Certificate sent to user {user_id}")
+
+    except Exception as e:
+        logger.error(f"Error sending certificate to user {user_id}: {e}")
+        await message.answer(
+            "❌ Error sending certificate. Please contact support."
+        )
