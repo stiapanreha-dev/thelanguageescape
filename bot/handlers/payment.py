@@ -267,10 +267,14 @@ async def callback_course_info(callback: CallbackQuery):
 
     keyboard = get_payment_keyboard()
 
-    await callback.message.edit_text(
-        info_text,
-        parse_mode="Markdown",
-        reply_markup=keyboard
-    )
+    try:
+        await callback.message.edit_text(
+            info_text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    except Exception:
+        # Ignore if message is the same (user clicked button again)
+        pass
 
     await callback.answer()
