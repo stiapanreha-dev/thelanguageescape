@@ -30,6 +30,11 @@ from bot.handlers.tasks import init_task_service
 
 # Import middlewares
 from bot.middlewares.admin import AdminMiddleware
+from bot.middlewares.activity import ActivityMiddleware
+
+# Import services
+from bot.services.reminders import initialize_reminder_service
+from bot.services.scheduler import scheduler_service
 
 # Configure logging
 logging.basicConfig(
@@ -76,6 +81,14 @@ async def on_startup(bot: Bot):
     # Initialize task service
     init_task_service()
 
+    # Initialize reminder service
+    initialize_reminder_service(bot)
+    logger.info("✅ Reminder service initialized")
+
+    # Start scheduler for automated tasks
+    scheduler_service.start()
+    logger.info("✅ Scheduler started")
+
     # Get bot info
     bot_info = await bot.get_me()
     logger.info(f"✅ Bot started: @{bot_info.username} (ID: {bot_info.id})")
@@ -91,6 +104,10 @@ async def on_shutdown(bot: Bot):
     logger.info("🛑 Shutting down The Language Escape Bot")
     logger.info("=" * 60)
 
+    # Stop scheduler
+    scheduler_service.stop()
+    logger.info("✅ Scheduler stopped")
+
     await bot.session.close()
 
 
@@ -102,7 +119,9 @@ def register_handlers(dp: Dispatcher):
         dp: Aiogram Dispatcher
     """
     # Register middlewares
+    dp.message.middleware(ActivityMiddleware())  # Track activity first
     dp.message.middleware(AdminMiddleware())
+    dp.callback_query.middleware(ActivityMiddleware())  # Track activity first
     dp.callback_query.middleware(AdminMiddleware())
 
     # Register routers in order of priority
