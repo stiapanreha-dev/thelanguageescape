@@ -127,7 +127,7 @@ async def handle_successful_payment(payment_id: str, payment_obj: dict):
 
             # Send success message to user
             if payment_service:
-                user_name = user.first_name or "Субъект X"
+                user_name = "Субъект X"
                 await payment_service.send_payment_success_message(
                     chat_id=telegram_id,
                     user_name=user_name

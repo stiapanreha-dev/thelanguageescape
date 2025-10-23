@@ -172,7 +172,7 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
     answer_letter = parts[3]
 
     user_id = callback.from_user.id
-    user_name = callback.from_user.first_name or "Subject X"
+    user_name = "Субъект X"
 
     # Get task
     task = course_service.get_task(day_number, task_number)
@@ -315,7 +315,7 @@ async def handle_voice_message(message: Message, session: AsyncSession):
     Handle voice message for voice tasks
     """
     user_id = message.from_user.id
-    user_name = message.from_user.first_name or "Subject X"
+    user_name = "Субъект X"
     voice: Voice = message.voice
 
     # For now, accept any voice message

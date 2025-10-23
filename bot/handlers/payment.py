@@ -46,7 +46,7 @@ async def cmd_pay(message: Message, session: AsyncSession):
     """
     user_id = message.from_user.id
     chat_id = message.chat.id
-    user_name = message.from_user.first_name or "Субъект X"
+    user_name = "Субъект X"
 
     logger.info(f"User {user_id} ({user_name}) requested payment")
 
@@ -238,7 +238,7 @@ async def cmd_check_payment(message: Message, session: AsyncSession):
             )
 
             if success:
-                user_name = message.from_user.first_name or "Субъект X"
+                user_name = "Субъект X"
                 await payment_service.send_payment_success_message(
                     chat_id=message.chat.id,
                     user_name=user_name
@@ -339,17 +339,13 @@ async def callback_back_to_welcome(callback: CallbackQuery):
     """Go back to welcome screen"""
     from bot.config import THEME_MESSAGES
 
-    user_name = callback.from_user.first_name or "Субъект X"
+    user_name = "Субъект X"
 
     welcome_text = THEME_MESSAGES['welcome'].format(
         days=COURSE_DAYS,
         price=COURSE_PRICE,
-        currency=COURSE_CURRENCY,
-        code="LIBERATION"
+        currency=COURSE_CURRENCY
     )
-
-    # Replace Subject X with actual name
-    welcome_text = welcome_text.replace("Субъект X", user_name)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(

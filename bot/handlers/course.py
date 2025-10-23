@@ -85,7 +85,7 @@ async def show_day(
         day=day_number,
         total_days=COURSE_DAYS,
         title=day_title,
-        name=message.from_user.first_name or "Subject X"
+        name="Субъект X"
     )
 
     # Check what materials are available
@@ -347,7 +347,7 @@ async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
     bot = callback.bot  # Get bot from callback
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
-    user_name = callback.from_user.first_name or "Subject X"
+    user_name = "Субъект X"
 
     # Complete the day
     success = await course_service.complete_day(session, user_id, day_number)

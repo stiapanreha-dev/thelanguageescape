@@ -67,7 +67,7 @@ async def check_pending_payments(message: Message, session: AsyncSession, user: 
                 logger.info(f"✅ Auto-activated access for user {user.telegram_id} via payment {payment.payment_id}")
 
                 # Send success message
-                user_name = message.from_user.first_name or "Субъект X"
+                user_name = "Субъект X"
                 await payment_service.send_payment_success_message(
                     chat_id=message.chat.id,
                     user_name=user_name
@@ -109,7 +109,7 @@ async def cmd_start(message: Message, session: AsyncSession):
         if user.has_access:
             # User has access - show main menu
             await message.answer(
-                f"⚡ **С возвращением, {first_name}!**\n\n"
+                f"⚡ **С возвращением, Субъект X!**\n\n"
                 f"Ты на **Дне {user.current_day}/{COURSE_DAYS}**\n"
                 f"Код освобождения: `{user.liberation_code or '___________'}`\n\n"
                 f"Готов продолжить побег?",
@@ -123,7 +123,7 @@ async def cmd_start(message: Message, session: AsyncSession):
             # If still no access after check, show purchase option
             await session.refresh(user)
             if not user.has_access:
-                await send_welcome_message(message, first_name, is_new=False)
+                await send_welcome_message(message, "Субъект X", is_new=False)
 
     else:
         # New user - create record
@@ -141,7 +141,7 @@ async def cmd_start(message: Message, session: AsyncSession):
         logger.info(f"✅ New user registered: {user_id} ({first_name})")
 
         # Send welcome message
-        await send_welcome_message(message, first_name, is_new=True)
+        await send_welcome_message(message, "Субъект X", is_new=True)
 
 
 async def send_welcome_message(message: Message, user_name: str, is_new: bool = True):
@@ -152,12 +152,8 @@ async def send_welcome_message(message: Message, user_name: str, is_new: bool = 
     welcome_text = THEME_MESSAGES['welcome'].format(
         days=COURSE_DAYS,
         price=COURSE_PRICE,
-        currency=COURSE_CURRENCY,
-        code="LIBERATION"
+        currency=COURSE_CURRENCY
     )
-
-    # Replace Subject X with actual name
-    welcome_text = welcome_text.replace("Subject X", user_name)
 
     await message.answer(
         welcome_text,
@@ -392,7 +388,7 @@ async def cmd_menu(message: Message, session: AsyncSession):
         return
 
     if not user.has_access:
-        await send_welcome_message(message, user.first_name or "Subject X", is_new=False)
+        await send_welcome_message(message, "Субъект X", is_new=False)
         return
 
     menu_text = f"""

@@ -78,7 +78,7 @@ class PaymentService:
                 },
                 "confirmation": {
                     "type": "redirect",
-                    "return_url": f"https://t.me/{bot_username}"  # Return to bot after payment
+                    "return_url": f"https://t.me/{bot_username}?start=payment_check"  # Auto-trigger payment check
                 },
                 "capture": True,  # Auto-capture payment
                 "description": description,
