@@ -353,16 +353,16 @@ async def callback_back_to_menu(callback: CallbackQuery, session: AsyncSession):
     user = result.scalar_one_or_none()
 
     if not user:
-        await callback.answer("User not found. Use /start", show_alert=True)
+        await callback.answer("Пользователь не найден. Используйте /start", show_alert=True)
         return
 
     menu_text = f"""
-🎮 **Main Menu**
+🎮 **Главное меню**
 
-Current progress: Day {user.current_day}/{COURSE_DAYS}
-Code collected: `{user.liberation_code or '___________'}`
+Текущий прогресс: День {user.current_day}/{COURSE_DAYS}
+Собрано кода: `{user.liberation_code or '___________'}`
 
-Choose an action:
+Выберите действие:
 """
 
     await callback.message.edit_text(
@@ -384,7 +384,7 @@ async def cmd_menu(message: Message, session: AsyncSession):
     user = result.scalar_one_or_none()
 
     if not user:
-        await message.answer("Please use /start first")
+        await message.answer("Пожалуйста, используйте /start")
         return
 
     if not user.has_access:
@@ -392,12 +392,12 @@ async def cmd_menu(message: Message, session: AsyncSession):
         return
 
     menu_text = f"""
-🎮 **Main Menu**
+🎮 **Главное меню**
 
-Current progress: Day {user.current_day}/{COURSE_DAYS}
-Code collected: `{user.liberation_code or '___________'}`
+Текущий прогресс: День {user.current_day}/{COURSE_DAYS}
+Собрано кода: `{user.liberation_code or '___________'}`
 
-Choose an action below:
+Выберите действие:
 """
 
     await message.answer(
