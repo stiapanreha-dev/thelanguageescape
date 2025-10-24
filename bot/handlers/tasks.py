@@ -56,6 +56,13 @@ async def callback_start_tasks(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ Задания для этого дня недоступны", show_alert=True)
         return
 
+    # Reset all attempts for this day (fresh start)
+    await task_service.reset_day_attempts(
+        session=session,
+        telegram_id=user_id,
+        day_number=day_number
+    )
+
     # Show first task
     await show_task(callback.message, session, user_id, day_number, 1)
     await callback.answer()
@@ -234,14 +241,14 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
 
         fail_text = THEME_MESSAGES['task_incorrect'].format(
             hint=hint,
-            attempts=f"{remaining_attempts}/{MAX_TASK_ATTEMPTS}",
+            attempts=remaining_attempts,
             name=user_name
         )
 
         await callback.message.edit_text(
             fail_text,
             parse_mode="Markdown",
-            reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, False)
+            reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, False, remaining_attempts)
         )
 
     await callback.answer()

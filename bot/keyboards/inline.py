@@ -145,10 +145,18 @@ def get_task_result_keyboard(
     day: int,
     task_number: int,
     total_tasks: int,
-    is_correct: bool
+    is_correct: bool,
+    remaining_attempts: int = 3
 ) -> InlineKeyboardMarkup:
     """
     Keyboard after task answer
+
+    Args:
+        day: Day number
+        task_number: Current task number
+        total_tasks: Total tasks in day
+        is_correct: Whether answer was correct
+        remaining_attempts: Remaining attempts (0-3)
     """
     keyboard_rows = []
 
@@ -169,13 +177,14 @@ def get_task_result_keyboard(
                 )
             ])
     else:
-        # Try again
-        keyboard_rows.append([
-            InlineKeyboardButton(
-                text="🔄 Попробовать снова",
-                callback_data=f"retry_task_{day}_{task_number}"
-            )
-        ])
+        # Try again (only if attempts remaining)
+        if remaining_attempts > 0:
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    text="🔄 Попробовать снова",
+                    callback_data=f"retry_task_{day}_{task_number}"
+                )
+            ])
 
     # Back to menu
     keyboard_rows.append([

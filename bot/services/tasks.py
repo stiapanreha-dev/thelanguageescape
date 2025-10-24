@@ -256,6 +256,51 @@ class TaskService:
 
         return task.attempts if task else 0
 
+    async def reset_day_attempts(
+        self,
+        session: AsyncSession,
+        telegram_id: int,
+        day_number: int
+    ) -> bool:
+        """
+        Reset all task attempts for a specific day
+
+        Args:
+            session: Database session
+            telegram_id: Telegram user ID
+            day_number: Day number
+
+        Returns:
+            True if reset successfully
+        """
+        try:
+            result = await session.execute(
+                select(User).where(User.telegram_id == telegram_id)
+            )
+            user = result.scalar_one_or_none()
+
+            if not user:
+                logger.error(f"User {telegram_id} not found")
+                return False
+
+            # Delete all task results for this day
+            from sqlalchemy import delete
+            await session.execute(
+                delete(TaskResult).where(
+                    TaskResult.user_id == user.id,
+                    TaskResult.day_number == day_number
+                )
+            )
+
+            await session.commit()
+            logger.info(f"Reset attempts for user {telegram_id}, day {day_number}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error resetting attempts: {e}")
+            await session.rollback()
+            return False
+
     async def get_day_completion_stats(
         self,
         session: AsyncSession,
