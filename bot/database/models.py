@@ -47,7 +47,7 @@ class User(Base):
     # Course progress
     current_day = Column(Integer, default=0, nullable=False)  # 0 = not started
     completed_days = Column(Integer, default=0, nullable=False)
-    liberation_code = Column(String(50), default='', nullable=False)  # Collected letters
+    liberation_code = Column(String(50), default='___________', nullable=False)  # Collected letters (11 underscores for LIBERATION)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

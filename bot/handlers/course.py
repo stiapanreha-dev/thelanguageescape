@@ -369,7 +369,7 @@ async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
 Отличная работа, {user_name}!
 
 🔑 **Фрагмент кода разблокирован:** `{letter}`
-📊 **Прогресс:** {progress_data['liberation_code']}
+📊 **Прогресс:** `{progress_data['liberation_code']}`
 ⏭️ **Уровень:** {day_number}/{COURSE_DAYS}
 
 """
@@ -378,7 +378,8 @@ async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
         completion_text += f"\n✨ **День {day_number + 1} теперь доступен!**\nГотов продолжить?"
     else:
         # Final day - generate certificate!
-        completion_text += f"\n🏆 **КОД ОСВОБОЖДЕНИЯ СОБРАН!**\n`{progress_data['liberation_code']}`\n\nТы сбежал из симуляции! 🎊\n\n⏳ Генерируем твой сертификат..."
+        liberation_code = progress_data['liberation_code']
+        completion_text += f"\n🏆 **КОД ОСВОБОЖДЕНИЯ СОБРАН!**\n`{liberation_code}`\n\nТы сбежал из симуляции! 🎊\n\n⏳ Генерируем твой сертификат..."
 
     from bot.keyboards.inline import get_day_completion_keyboard
     keyboard = get_day_completion_keyboard(day_number, COURSE_DAYS)

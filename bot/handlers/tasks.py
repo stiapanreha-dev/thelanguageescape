@@ -3,6 +3,7 @@ Tasks handlers - interactive tasks system
 Handles choice, voice, and dialog tasks
 """
 import logging
+import os
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, Voice
 from aiogram.fsm.context import FSMContext
@@ -85,6 +86,13 @@ async def show_task(
         day_number: Day number
         task_number: Task number
     """
+    # Get user for name substitution
+    result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    user_name = user.first_name if user and user.first_name else "Субъект X"
+
     # Get task data
     task = course_service.get_task(day_number, task_number)
 
@@ -97,20 +105,61 @@ async def show_task(
     task_type = task.get('type', 'choice')
     title = task.get('title', f'Задание {task_number}')
     question = task.get('question', '')
+    media = task.get('media', None)  # Path to video/image for task
+
+    # Replace [Имя] placeholder with user's real name
+    question = question.replace('[Имя]', user_name)
 
     if task_type == 'choice':
         # Multiple choice task
         options = task.get('options', [])
 
+        # Replace [Имя] in options
+        options = [opt.replace('[Имя]', user_name) for opt in options]
+
         task_text = f"**{question}**"
 
         keyboard = get_task_keyboard(day_number, task_number, options)
 
-        await message.answer(
-            task_text,
-            parse_mode="Markdown",
-            reply_markup=keyboard
-        )
+        # Send media if available
+        if media and os.path.exists(media):
+            from aiogram.types import FSInputFile
+
+            # Determine media type by extension
+            if media.lower().endswith(('.mp4', '.mov', '.avi')):
+                # Send as animation (GIF) - plays once without controls
+                video = FSInputFile(media)
+                await message.answer_animation(
+                    animation=video,
+                    caption=task_text,
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
+            elif media.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                # Send photo with caption
+                photo = FSInputFile(media)
+                await message.answer_photo(
+                    photo,
+                    caption=task_text,
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
+            else:
+                # Unknown media type, send as document
+                doc = FSInputFile(media)
+                await message.answer_document(
+                    doc,
+                    caption=task_text,
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
+        else:
+            # No media, send text only
+            await message.answer(
+                task_text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
 
     elif task_type == 'voice':
         # Voice task
@@ -135,16 +184,13 @@ async def show_task(
 
     elif task_type == 'dialog':
         # Dialog task
-        task_text = f"""
-💬 **Диалог {task_number}/{len(course_service.get_day_tasks(day_number))}**
-
-**{question}**
-
-Давай поговорим. Выбери свой ответ:
-"""
+        task_text = f"**{question}**"
 
         # Get dialog options (first step)
         options = task.get('options', [])[:4]  # Take first 4 options
+
+        # Replace [Имя] in options
+        options = [opt.replace('[Имя]', user_name) for opt in options]
 
         keyboard = get_task_keyboard(day_number, task_number, options)
 
@@ -209,6 +255,19 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
     if is_correct:
         # Correct answer
         letter = course_service.get_code_letter(day_number) if task_number == total_tasks else ""
+
+        # Check if next task is voice - auto-transition
+        next_task_number = task_number + 1
+        if task_number < total_tasks:
+            next_task = course_service.get_task(day_number, next_task_number)
+            logger.info(f"Checking next task: day={day_number}, task={next_task_number}, type={next_task.get('type') if next_task else None}")
+            if next_task and next_task.get('type') == 'voice':
+                # Auto-transition to voice task
+                logger.info(f"Auto-transitioning to voice task {next_task_number} for user {user_id}")
+                await callback.message.delete()
+                await show_task(callback.message, session, user_id, day_number, next_task_number)
+                await callback.answer("✅ Отлично!")
+                return
 
         success_text = THEME_MESSAGES['task_correct'].format(
             name=user_name,
@@ -319,23 +378,177 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
 async def handle_voice_message(message: Message, session: AsyncSession):
     """
     Handle voice message for voice tasks
+    Uses Vosk speech recognition to check for "My name is [Name]" phrase
     """
+    from bot.services.speech_recognition import speech_service
+    import os
+    import tempfile
+
     user_id = message.from_user.id
     user_name = "Субъект X"
     voice: Voice = message.voice
 
-    # For now, accept any voice message
-    # TODO: Implement Vosk speech recognition
+    logger.info(f"🎤 Voice message received from user {user_id}, duration: {voice.duration}s")
 
-    await message.answer(
-        f"🎉 **Отлично, {user_name}!**\n\n"
-        f"Голосовое сообщение получено! ✅\n"
-        f"Длительность: {voice.duration}с\n\n"
-        f"Распознавание речи скоро будет добавлено.\n"
-        f"Пока все голосовые сообщения принимаются! 🎤"
+    # Get user's current day and find active voice task
+    result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user or not user.has_access:
+        logger.warning(f"User {user_id} has no access to course")
+        await message.answer("❌ У вас нет доступа к курсу")
+        return
+
+    # Determine the day user is ACTUALLY working on by checking latest task result
+    # This handles the case where user is repeating an old day
+    from bot.database.models import TaskResult
+    from sqlalchemy import desc
+
+    latest_result = await session.execute(
+        select(TaskResult)
+        .where(TaskResult.user_id == user.id)
+        .order_by(desc(TaskResult.created_at))
+        .limit(1)
+    )
+    latest = latest_result.scalar_one_or_none()
+
+    if latest:
+        day_number = latest.day_number
+        logger.info(f"User {user_id} is working on day {day_number} (from latest task result)")
+    else:
+        day_number = user.current_day
+        logger.info(f"User {user_id} current day: {day_number} (no task results yet)")
+
+    # Find voice task for current day (usually task #2)
+    voice_task = None
+    voice_task_number = None
+    tasks = course_service.get_day_tasks(day_number)
+    logger.info(f"Found {len(tasks)} tasks for day {day_number}")
+
+    for task in tasks:
+        if task.get('type') == 'voice':
+            voice_task = task
+            voice_task_number = task.get('task_number')
+            logger.info(f"Found voice task #{voice_task_number}")
+            break
+
+    if not voice_task:
+        logger.warning(f"No voice task found for day {day_number}")
+        await message.answer("🎤 Голосовое сообщение получено, но сейчас нет активного голосового задания")
+        return
+
+    # Download voice message
+    try:
+        # Show processing message
+        processing_msg = await message.answer("🎧 Обрабатываю голосовое сообщение...")
+
+        # Download file
+        file = await message.bot.get_file(voice.file_id)
+
+        # Create temp file for voice
+        with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as temp_file:
+            temp_path = temp_file.name
+            await message.bot.download_file(file.file_path, temp_path)
+
+        # Process voice with speech recognition
+        recognized_text, extracted_name, has_phrase = await speech_service.process_voice_message(temp_path)
+
+        # Cleanup temp file
+        try:
+            os.remove(temp_path)
+        except:
+            pass
+
+        # Delete processing message
+        await processing_msg.delete()
+
+        # Check if recognition was successful
+        if not recognized_text:
+            await message.answer(
+                "❌ **Не удалось распознать речь**\n\n"
+                "Попробуй еще раз:\n"
+                "1. Говори четко и медленно\n"
+                "2. Убедись, что произносишь фразу полностью\n"
+                "3. Уменьши фоновый шум",
+                parse_mode="Markdown"
+            )
+            logger.warning(f"Voice recognition failed for user {user_id}")
+            return
+
+        # Check if required phrase was detected
+        if not has_phrase:
+            await message.answer(
+                f"❌ **Фраза 'My name is' не обнаружена**\n\n"
+                f"Я услышал: _{recognized_text}_\n\n"
+                f"Пожалуйста, произнеси фразу **'My name is [твоё имя]'**",
+                parse_mode="Markdown"
+            )
+            logger.info(f"Phrase not found. Recognized: {recognized_text}")
+            return
+
+        # Check if name was extracted
+        if not extracted_name:
+            await message.answer(
+                f"❌ **Не удалось извлечь имя**\n\n"
+                f"Я услышал: _{recognized_text}_\n\n"
+                f"Убедись, что после 'My name is' произносишь свое имя",
+                parse_mode="Markdown"
+            )
+            logger.info(f"Name not extracted. Recognized: {recognized_text}")
+            return
+
+        # Success! Save name to user profile
+        user.first_name = extracted_name
+        await session.commit()
+
+        logger.info(f"Successfully extracted name '{extracted_name}' from voice message (user {user_id})")
+
+        # Mark task as correct
+        is_correct = True
+
+    except Exception as e:
+        logger.error(f"Error processing voice message: {e}")
+        await message.answer(
+            "❌ **Ошибка обработки голосового сообщения**\n\n"
+            "Попробуй отправить еще раз",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Save result
+    await task_service.save_task_result(
+        session=session,
+        telegram_id=user_id,
+        day_number=day_number,
+        task_number=voice_task_number,
+        task_type=TaskType.VOICE,
+        is_correct=is_correct,
+        voice_file_id=voice.file_id,
+        voice_duration=voice.duration,
+        recognized_text=recognized_text
     )
 
-    logger.info(f"Voice message from user {user_id}, duration: {voice.duration}s")
+    # Success message with extracted name
+    total_tasks = len(tasks)
+    letter = course_service.get_code_letter(day_number) if voice_task_number == total_tasks else ""
+
+    success_text = f"✅ **Отлично, {extracted_name}!**\n\nТы успешно прошёл голосовое задание."
+    if letter:
+        success_text += f"\n\n🔑 **Фрагмент кода:** `{letter}`"
+
+    # Auto-transition to next task
+    next_task_number = voice_task_number + 1
+    if voice_task_number < total_tasks:
+        await message.answer(success_text, parse_mode="Markdown")
+        await show_task(message, session, user_id, day_number, next_task_number)
+    else:
+        # Last task - show completion
+        keyboard = get_task_result_keyboard(day_number, voice_task_number, total_tasks, True)
+        await message.answer(success_text, parse_mode="Markdown", reply_markup=keyboard)
+
+    logger.info(f"Voice message from user {user_id}, duration: {voice.duration}s, name: {extracted_name}, accepted")
 
 
 @router.callback_query(F.data.startswith("voice_instructions_"))

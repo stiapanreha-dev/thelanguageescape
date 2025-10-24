@@ -234,10 +234,19 @@ class CourseService:
         progress.tasks_completed = True
         progress.completed_at = datetime.utcnow()
 
-        # Add letter to liberation code
+        # Add letter to liberation code at the correct position
         letter = self.get_code_letter(day_number)
-        if letter and letter not in user.liberation_code:
-            user.liberation_code += letter
+        if letter:
+            # Build the code with underscores for incomplete positions
+            code_list = list('_' * len(LIBERATION_CODE))  # Start with all underscores
+
+            # Fill in completed letters
+            for day in range(1, day_number + 1):
+                day_letter = self.get_code_letter(day)
+                if day_letter:
+                    code_list[day - 1] = day_letter
+
+            user.liberation_code = ''.join(code_list)
 
         # Update user stats
         user.completed_days = day_number

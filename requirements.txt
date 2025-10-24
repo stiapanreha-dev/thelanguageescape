@@ -13,6 +13,7 @@ yookassa==3.7.1
 # Speech Recognition
 vosk==0.3.45
 pydub==0.25.1
+# Note: ffmpeg must be installed system-wide for audio conversion
 
 # Image Processing (for certificates)
 Pillow==11.0.0
