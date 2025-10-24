@@ -218,6 +218,44 @@ class TaskService:
 
         return task_result.scalar_one_or_none() is not None
 
+    async def get_task_attempts(
+        self,
+        session: AsyncSession,
+        telegram_id: int,
+        day_number: int,
+        task_number: int
+    ) -> int:
+        """
+        Get number of attempts for a specific task
+
+        Args:
+            session: Database session
+            telegram_id: Telegram user ID
+            day_number: Day number
+            task_number: Task number
+
+        Returns:
+            Number of attempts (0 if no attempts yet)
+        """
+        result = await session.execute(
+            select(User).where(User.telegram_id == telegram_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return 0
+
+        task_result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user.id,
+                TaskResult.day_number == day_number,
+                TaskResult.task_number == task_number
+            )
+        )
+        task = task_result.scalar_one_or_none()
+
+        return task.attempts if task else 0
+
     async def get_day_completion_stats(
         self,
         session: AsyncSession,

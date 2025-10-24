@@ -221,9 +221,20 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
         # Incorrect answer
         hint = task.get('hints', ['Try again!'])[0] if task.get('hints') else 'Try again!'
 
+        # Get current number of attempts
+        current_attempts = await task_service.get_task_attempts(
+            session=session,
+            telegram_id=user_id,
+            day_number=day_number,
+            task_number=task_number
+        )
+
+        # Calculate remaining attempts
+        remaining_attempts = MAX_TASK_ATTEMPTS - current_attempts
+
         fail_text = THEME_MESSAGES['task_incorrect'].format(
             hint=hint,
-            attempts=MAX_TASK_ATTEMPTS,
+            attempts=f"{remaining_attempts}/{MAX_TASK_ATTEMPTS}",
             name=user_name
         )
 
