@@ -95,13 +95,7 @@ async def show_task(
         # Multiple choice task
         options = task.get('options', [])
 
-        task_text = f"""
-📝 **Задание {task_number}/{len(course_service.get_day_tasks(day_number))}**
-
-**{question}**
-
-Выбери правильный ответ:
-"""
+        task_text = f"**{question}**"
 
         keyboard = get_task_keyboard(day_number, task_number, options)
 
