@@ -98,9 +98,7 @@ async def show_task(
         task_text = f"""
 📝 **Задание {task_number}/{len(course_service.get_day_tasks(day_number))}**
 
-**{title}**
-
-{question}
+**{question}**
 
 Выбери правильный ответ:
 """
@@ -118,9 +116,7 @@ async def show_task(
         task_text = f"""
 🎤 **Голосовое задание {task_number}/{len(course_service.get_day_tasks(day_number))}**
 
-**{title}**
-
-{question}
+**{question}**
 
 **Инструкция:**
 1. Запиши себя, произнося фразу
@@ -141,9 +137,7 @@ async def show_task(
         task_text = f"""
 💬 **Диалог {task_number}/{len(course_service.get_day_tasks(day_number))}**
 
-**{title}**
-
-{question}
+**{question}**
 
 Давай поговорим. Выбери свой ответ:
 """
