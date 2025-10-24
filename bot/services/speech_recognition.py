@@ -119,9 +119,10 @@ class SpeechRecognitionService:
         try:
             output_file = input_file.rsplit('.', 1)[0] + '.wav'
 
-            # Use ffmpeg to convert
+            # Use ffmpeg to convert (use full path to avoid PATH issues)
+            ffmpeg_path = '/usr/bin/ffmpeg'
             cmd = [
-                'ffmpeg',
+                ffmpeg_path,
                 '-i', input_file,
                 '-ar', str(self.sample_rate),  # 16kHz
                 '-ac', '1',  # Mono
