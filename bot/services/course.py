@@ -299,7 +299,8 @@ class CourseService:
         completed_tasks = sum(p.completed_tasks for p in progress_records)
         correct_answers = sum(p.correct_answers for p in progress_records)
 
-        accuracy = (correct_answers / total_tasks * 100) if total_tasks > 0 else 0
+        # Cap accuracy at 100% maximum
+        accuracy = min(100.0, (correct_answers / total_tasks * 100)) if total_tasks > 0 else 0
 
         return {
             'user': user,
@@ -369,14 +370,28 @@ class CourseService:
             progress.brief_read = True
             await session.commit()
 
-    def format_progress_message(self, progress_data: Dict[str, Any]) -> str:
+    async def format_progress_message(self, session: AsyncSession, progress_data: Dict[str, Any]) -> str:
         """Format progress data into readable message"""
         user = progress_data['user']
+
+        # Get user's name from Day 1 Task 2 results
+        user_display_name = "Субъект X"
+        name_result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user.id,
+                TaskResult.day_number == 1,
+                TaskResult.task_number == 2,
+                TaskResult.is_correct == True
+            ).order_by(TaskResult.completed_at.desc())
+        )
+        name_task = name_result.scalar_one_or_none()
+        if name_task and name_task.user_answer:
+            user_display_name = name_task.user_answer
 
         message = f"""
 📊 **Твой прогресс**
 
-**Имя:** Субъект X
+**Имя:** {user_display_name}
 **Текущий день:** {progress_data['current_day']}/{COURSE_DAYS}
 **Пройдено дней:** {progress_data['completed_days']}
 

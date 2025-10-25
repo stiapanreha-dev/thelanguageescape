@@ -80,12 +80,38 @@ async def show_day(
     day_title = course_service.get_day_title(day_number)
     day_tasks = course_service.get_day_tasks(day_number)
 
+    # Get user's name from Day 1 voice task (for personalization after completing it)
+    user_name = "Субъект X"
+    from bot.database.models import TaskResult, User
+    from sqlalchemy import select
+
+    # First, get internal user id from users table
+    user_result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user:
+        # Now query task results using internal user id
+        result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user.id,  # Use internal id, not telegram_id
+                TaskResult.day_number == 1,
+                TaskResult.task_number == 2,
+                TaskResult.is_correct == True
+            ).order_by(TaskResult.completed_at.desc())
+        )
+        task_result = result.scalar_one_or_none()
+
+        if task_result and task_result.user_answer:
+            user_name = task_result.user_answer
+
     # Format day message
     day_text = THEME_MESSAGES['day_start'].format(
         day=day_number,
         total_days=COURSE_DAYS,
         title=day_title,
-        name="Субъект X"
+        name=user_name
     )
 
     # Check what materials are available
@@ -106,8 +132,48 @@ async def callback_start_day(callback: CallbackQuery, session: AsyncSession):
     """
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
+    bot = callback.bot
 
     await callback.message.delete()
+
+    # For Day 2+, send intro audio first
+    if day_number >= 2:
+        from aiogram.types import FSInputFile
+        from bot.database.models import User, TaskResult
+        from sqlalchemy import select
+        import os
+
+        # Get user's name from Day 1 voice task
+        # First, get internal user id
+        user_result = await session.execute(
+            select(User).where(User.telegram_id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        user_name = "Subject X"
+        if user:
+            result = await session.execute(
+                select(TaskResult).where(
+                    TaskResult.user_id == user.id,  # Use internal id, not telegram_id
+                    TaskResult.day_number == 1,
+                    TaskResult.task_number == 2,
+                    TaskResult.is_correct == True
+                ).order_by(TaskResult.completed_at.desc())
+            )
+            task_result = result.scalar_one_or_none()
+
+            if task_result and task_result.user_answer:
+                user_name = task_result.user_answer
+
+        # Send intro voice message if exists
+        intro_audio_path = f"docs/Материалы/По_дням/день{day_number:02d}/Готовое/day_{day_number:02d}_intro.mp3"
+        if os.path.exists(intro_audio_path):
+            voice_file = FSInputFile(intro_audio_path)
+            await bot.send_voice(
+                chat_id=callback.message.chat.id,
+                voice=voice_file
+            )
+
     await show_day(callback.message, session, user_id, day_number)
     await callback.answer()
 
@@ -175,11 +241,27 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
             parse_mode="Markdown"
         )
 
+        # Create keyboard for video
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        video_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="📄 Читать брифинг",
+                callback_data=f"read_brief_{day_number}"
+            )],
+            [InlineKeyboardButton(
+                text="✅ Начать задания",
+                callback_data=f"start_tasks_{day_number}"
+            )]
+        ])
+
         video_file = FSInputFile(str(full_path))
         await bot.send_video(
             chat_id=chat_id,
             video=video_file,
-            caption=f"Day {day_number}: {course_service.get_day_title(day_number)}"
+            caption=f"Day {day_number}: {course_service.get_day_title(day_number)}",
+            width=1920,
+            height=1080,
+            reply_markup=video_keyboard
         )
 
         # Mark as watched
@@ -236,11 +318,21 @@ async def callback_read_brief(callback: CallbackQuery, session: AsyncSession):
             parse_mode="Markdown"
         )
 
+        # Create keyboard for brief
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        brief_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="✅ Начать задания",
+                callback_data=f"start_tasks_{day_number}"
+            )]
+        ])
+
         brief_file = FSInputFile(str(full_path))
         await bot.send_document(
             chat_id=chat_id,
             document=brief_file,
-            caption=f"Day {day_number}: {course_service.get_day_title(day_number)}"
+            caption=f"Day {day_number}: {course_service.get_day_title(day_number)}",
+            reply_markup=brief_keyboard
         )
 
         # Mark as read
@@ -274,7 +366,7 @@ async def cmd_progress(message: Message, session: AsyncSession):
         return
 
     # Format progress message
-    progress_text = course_service.format_progress_message(progress_data)
+    progress_text = await course_service.format_progress_message(session, progress_data)
 
     await message.answer(
         progress_text,
@@ -296,7 +388,7 @@ async def callback_show_progress(callback: CallbackQuery, session: AsyncSession)
         await callback.answer("Progress not found", show_alert=True)
         return
 
-    progress_text = course_service.format_progress_message(progress_data)
+    progress_text = await course_service.format_progress_message(session, progress_data)
 
     await callback.message.edit_text(
         progress_text,
@@ -347,7 +439,31 @@ async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
     bot = callback.bot  # Get bot from callback
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
+
+    # Get user's name from Day 1 voice task
     user_name = "Субъект X"
+    from bot.database.models import User, TaskResult
+    from sqlalchemy import select
+
+    # Get internal user id
+    user_result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user:
+        # Get name from Day 1 Task 2 results
+        name_result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user.id,
+                TaskResult.day_number == 1,
+                TaskResult.task_number == 2,
+                TaskResult.is_correct == True
+            ).order_by(TaskResult.completed_at.desc())
+        )
+        name_task = name_result.scalar_one_or_none()
+        if name_task and name_task.user_answer:
+            user_name = name_task.user_answer
 
     # Complete the day
     success = await course_service.complete_day(session, user_id, day_number)
@@ -453,9 +569,13 @@ async def generate_and_send_certificate(
             )
             return
 
-        await bot.send_document(
+        # Cap accuracy at 100% for display
+        accuracy_display = min(100.0, progress_data.get('accuracy', 100))
+
+        # Send photo and capture the message to get file_id
+        sent_message = await bot.send_photo(
             chat_id=message.chat.id,
-            document=cert_file,
+            photo=cert_file,
             caption=f"""
 📜 **Сертификат о прохождении**
 
@@ -464,7 +584,7 @@ async def generate_and_send_certificate(
 Ты успешно завершил курс **The Language Escape**!
 
 🔑 Код освобождения: `{progress_data.get('liberation_code', 'LIBERATION')}`
-✅ Точность: {progress_data.get('accuracy', 100):.1f}%
+✅ Точность: {accuracy_display:.1f}%
 📅 Завершено: {progress_data.get('course_completed').strftime('%d.%m.%Y') if progress_data.get('course_completed') else 'Сегодня'}
 
 **Что дальше?**
@@ -474,9 +594,11 @@ async def generate_and_send_certificate(
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📢 Присоединиться к каналу", url="https://t.me/language_escape")],
-                [InlineKeyboardButton(text="🔄 Поделиться сертификатом", switch_inline_query="Я прошёл The Language Escape! 🎉")],
             ])
         )
+
+        # Extract file_id from sent photo (get largest size)
+        file_id = sent_message.photo[-1].file_id if sent_message.photo else None
 
         # Save certificate info to database
         result = await session.execute(
@@ -485,19 +607,24 @@ async def generate_and_send_certificate(
         user = result.scalar_one_or_none()
 
         if user:
+            # Cap accuracy at 100% before saving to database
+            accuracy_to_save = min(100.0, progress_data.get('accuracy', 0.0))
+
             certificate = Certificate(
                 user_id=user.id,
                 certificate_code=progress_data.get('liberation_code', 'LIBERATION'),
                 file_path=str(cert_path),
+                file_id=file_id,  # Save Telegram file_id for inline sharing
                 completion_date=progress_data.get('course_completed') or datetime.utcnow(),
                 total_days=10,
                 final_code=progress_data.get('liberation_code', 'LIBERATION'),
                 total_tasks=progress_data.get('total_tasks', 0),
                 correct_answers=progress_data.get('correct_answers', 0),
-                accuracy=progress_data.get('accuracy', 0.0)
+                accuracy=accuracy_to_save
             )
             session.add(certificate)
             await session.commit()
+            logger.info(f"✅ Certificate saved with file_id: {file_id}")
 
         logger.info(f"✅ Certificate sent to user {user_id}")
 

@@ -71,6 +71,8 @@ def admin_required(func):
         async def admin_panel(message: Message, is_admin: bool):
             ...
     """
+    import inspect
+
     async def wrapper(event: Message | CallbackQuery, *args, **kwargs):
         is_admin = kwargs.get('is_admin', False)
 
@@ -83,7 +85,14 @@ def admin_required(func):
             logger.warning(f"Non-admin user {event.from_user.id} tried to access admin function")
             return
 
-        return await func(event, *args, **kwargs)
+        # Filter kwargs to only pass parameters that the function expects
+        sig = inspect.signature(func)
+        filtered_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k in sig.parameters
+        }
+
+        return await func(event, *args, **filtered_kwargs)
 
     return wrapper
 
