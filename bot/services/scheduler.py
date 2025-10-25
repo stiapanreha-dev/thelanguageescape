@@ -9,7 +9,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.database import async_session_maker
-from bot.services.reminders import reminder_service
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +36,9 @@ class SchedulerService:
         """
         try:
             logger.info("🔔 Running reminder check job...")
+
+            # Import reminder_service at runtime to get current value
+            from bot.services.reminders import reminder_service
 
             async with async_session_maker() as session:
                 if reminder_service:
