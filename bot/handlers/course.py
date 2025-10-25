@@ -10,7 +10,7 @@ from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import THEME_MESSAGES, COURSE_DAYS
+from bot.config import THEME_MESSAGES, COURSE_DAYS, MATERIALS_PATH
 from bot.services.course import course_service
 from bot.keyboards.inline import (
     get_day_keyboard,
@@ -223,7 +223,8 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
 
     # Send video
     try:
-        full_path = Path(video_path)
+        # Resolve path relative to MATERIALS_PATH
+        full_path = MATERIALS_PATH / video_path
         if not full_path.exists():
             await callback.answer("❌ Video file not found", show_alert=True)
             logger.error(f"Video file not found: {full_path}")
@@ -300,7 +301,8 @@ async def callback_read_brief(callback: CallbackQuery, session: AsyncSession):
 
     # Send PDF
     try:
-        full_path = Path(brief_path)
+        # Resolve path relative to MATERIALS_PATH
+        full_path = MATERIALS_PATH / brief_path
         if not full_path.exists():
             await callback.answer("❌ Brief file not found", show_alert=True)
             logger.error(f"Brief file not found: {full_path}")
