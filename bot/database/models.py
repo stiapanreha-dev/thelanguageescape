@@ -40,6 +40,10 @@ class User(Base):
     last_name = Column(String(255), nullable=True)
     email = Column(String(255), nullable=True)
 
+    # User profile data collected during course
+    country = Column(String(255), nullable=True)  # From Day 2 Task 3
+    profession = Column(String(255), nullable=True)  # From Day 2 Task 4
+
     # Access control
     has_access = Column(Boolean, default=False, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
@@ -200,7 +204,7 @@ class Certificate(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
 
     # Certificate details
-    certificate_code = Column(String(100), unique=True, nullable=False)
+    certificate_code = Column(String(100), nullable=False)  # Removed unique=True - all users have LIBERATION
     file_path = Column(String(500), nullable=True)
     file_id = Column(String(255), nullable=True)  # Telegram file_id for reuse
 

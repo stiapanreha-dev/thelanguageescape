@@ -181,6 +181,61 @@ class SpeechRecognitionService:
         logger.warning(f"Could not extract name from: {text}")
         return None
 
+    def extract_country_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract country from text containing "I'm from [Country]"
+
+        Args:
+            text: Transcribed text
+
+        Returns:
+            Extracted country or None
+        """
+        patterns = [
+            r"i'?m\s+from\s+([a-zA-Z\s]+?)(?:\s+and|\s+but|$|\.|,)",
+            r'i\s+am\s+from\s+([a-zA-Z\s]+?)(?:\s+and|\s+but|$|\.|,)',
+            r'from\s+([a-zA-Z\s]+?)(?:\s+and|\s+but|$|\.|,)',
+        ]
+
+        text_lower = text.lower()
+
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                country = match.group(1).strip().title()
+                logger.info(f"Extracted country: {country}")
+                return country
+
+        logger.warning(f"Could not extract country from: {text}")
+        return None
+
+    def extract_profession_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract profession from text containing "I'm a [Profession]"
+
+        Args:
+            text: Transcribed text
+
+        Returns:
+            Extracted profession or None
+        """
+        patterns = [
+            r"i'?m\s+an?\s+([a-zA-Z\s]+?)(?:\s+and|\s+but|$|\.|,)",
+            r'i\s+am\s+an?\s+([a-zA-Z\s]+?)(?:\s+and|\s+but|$|\.|,)',
+        ]
+
+        text_lower = text.lower()
+
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                profession = match.group(1).strip().lower()
+                logger.info(f"Extracted profession: {profession}")
+                return profession
+
+        logger.warning(f"Could not extract profession from: {text}")
+        return None
+
     def check_phrase(self, text: str, phrase: str = "my name is") -> bool:
         """
         Check if text contains specific phrase

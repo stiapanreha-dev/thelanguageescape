@@ -11,12 +11,41 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import COURSE_NAME, COURSE_PRICE, COURSE_CURRENCY, COURSE_DAYS, THEME_MESSAGES
-from bot.database.models import User, Payment, PaymentStatus
+from bot.database.models import User, Payment, PaymentStatus, TaskResult
 from bot.keyboards.inline import get_welcome_keyboard, get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="start")
+
+
+async def get_user_name_from_day1(session: AsyncSession, user_id: int) -> str:
+    """
+    Get user's name from Day 1 Task 2 voice recognition result
+
+    Args:
+        session: Database session
+        user_id: User's database ID (not telegram_id!)
+
+    Returns:
+        User's name or "Субъект X" if not found
+    """
+    try:
+        result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user_id,
+                TaskResult.day_number == 1,
+                TaskResult.task_number == 2,
+                TaskResult.is_correct == True
+            ).order_by(TaskResult.completed_at.desc())
+        )
+        name_task = result.scalar_one_or_none()
+        if name_task and name_task.user_answer:
+            return name_task.user_answer
+    except Exception as e:
+        logger.error(f"Error getting user name from Day 1: {e}")
+
+    return "Субъект X"
 
 
 async def check_pending_payments(message: Message, session: AsyncSession, user: User):
@@ -108,8 +137,11 @@ async def cmd_start(message: Message, session: AsyncSession):
 
         if user.has_access:
             # User has access - show main menu
+            # Get user's name from Day 1 Task 2
+            user_display_name = await get_user_name_from_day1(session, user.id)
+
             await message.answer(
-                f"⚡ **С возвращением, Субъект X!**\n\n"
+                f"⚡ **С возвращением, {user_display_name}!**\n\n"
                 f"Ты на **Дне {user.current_day}/{COURSE_DAYS}**\n"
                 f"Код освобождения: `{user.liberation_code or '___________'}`\n\n"
                 f"Готов продолжить побег?",
@@ -249,7 +281,7 @@ A mysterious hacker, Emma, appears with a message: *"Learn to speak, and you'll 
 
 **Your Mission:**
 • Complete {COURSE_DAYS} days of challenges
-• Collect letters to form the code LIBERATION
+• Collect secret code letters day by day
 • Escape the simulation
 
 **What You'll Learn:**
@@ -333,12 +365,38 @@ async def callback_help(callback: CallbackQuery, session: AsyncSession):
             "Вопросы? Напиши в поддержку"
         )
 
+    # Create back button keyboard
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="back_to_welcome"
+        )]
+    ])
+
     # Send as plain text without parse_mode to avoid entity parsing
     try:
-        await callback.message.edit_text(help_text, parse_mode=None)
+        await callback.message.edit_text(help_text, parse_mode=None, reply_markup=back_keyboard)
     except Exception as e:
         logger.error(f"Error editing help message: {e}")
         await callback.answer("Ошибка отображения справки", show_alert=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_welcome")
+async def callback_back_to_welcome(callback: CallbackQuery):
+    """Return to welcome message for unauthorized users"""
+    welcome_text = THEME_MESSAGES['welcome'].format(
+        days=COURSE_DAYS,
+        price=COURSE_PRICE,
+        currency=COURSE_CURRENCY
+    )
+
+    await callback.message.edit_text(
+        welcome_text,
+        parse_mode="Markdown",
+        reply_markup=get_welcome_keyboard()
+    )
     await callback.answer()
 
 

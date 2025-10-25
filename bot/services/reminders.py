@@ -27,7 +27,7 @@ class ReminderService:
 You've been inactive for 24 hours. The simulation is waiting... Don't let your progress slip away!
 
 🎯 **Your mission:** Continue your escape journey
-🔑 **Your progress:** Every day brings you closer to LIBERATION
+🔑 **Your progress:** Every day brings you closer to freedom
 
 Ready to continue? /day
 """,
@@ -38,7 +38,7 @@ Ready to continue? /day
 The simulation has noticed your absence. 48 hours have passed...
 
 ⏰ **Time is running out!**
-Your liberation code is incomplete: `{liberation_code}`
+Your secret code is incomplete: `{liberation_code}`
 
 Don't give up now! Every day counts.
 

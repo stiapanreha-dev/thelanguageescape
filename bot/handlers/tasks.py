@@ -91,7 +91,25 @@ async def show_task(
         select(User).where(User.telegram_id == user_id)
     )
     user = result.scalar_one_or_none()
-    user_name = user.first_name if user and user.first_name else "Субъект X"
+
+    # Get user's name from Day 1 voice task (for personalization)
+    user_name = "Субъект X"
+    if user:
+        from bot.database.models import TaskResult
+
+        # Get name from Day 1 Task 2 (voice task where name was collected)
+        name_result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user.id,
+                TaskResult.day_number == 1,
+                TaskResult.task_number == 2,
+                TaskResult.is_correct == True
+            ).order_by(TaskResult.completed_at.desc())
+        )
+        task_result = name_result.scalar_one_or_none()
+
+        if task_result and task_result.user_answer:
+            user_name = task_result.user_answer
 
     # Get task data
     task = course_service.get_task(day_number, task_number)
@@ -107,8 +125,9 @@ async def show_task(
     question = task.get('question', '')
     media = task.get('media', None)  # Path to video/image for task
 
-    # Replace [Имя] placeholder with user's real name
+    # Replace [Имя] and Subject X placeholders with user's real name
     question = question.replace('[Имя]', user_name)
+    question = question.replace('Subject X', user_name)
 
     if task_type == 'choice':
         # Multiple choice task
@@ -155,6 +174,44 @@ async def show_task(
                 )
         else:
             # No media, send text only
+            await message.answer(
+                task_text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+
+    elif task_type == 'audio':
+        # Audio listening task
+        options = task.get('options', [])
+
+        # Replace [Имя] in options and question
+        options = [opt.replace('[Имя]', user_name) for opt in options]
+        question = question.replace('[Имя]', user_name)
+
+        task_text = f"**{question}**"
+
+        # If no options provided, create a single "Continue" button
+        if not options:
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Прослушал(а)", callback_data=f"answer_{day_number}_{task_number}_completed")]
+            ])
+        else:
+            keyboard = get_task_keyboard(day_number, task_number, options)
+
+        # Send audio if available
+        if media and os.path.exists(media):
+            from aiogram.types import FSInputFile
+
+            audio = FSInputFile(media)
+            await message.answer_audio(
+                audio=audio,
+                caption=task_text,
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+        else:
+            # No audio file, send text only
             await message.answer(
                 task_text,
                 parse_mode="Markdown",
@@ -215,6 +272,28 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
     user_id = callback.from_user.id
     user_name = "Субъект X"
 
+    # Get user's name from Day 1 Task 2 results
+    from bot.database.models import User, TaskResult
+    from sqlalchemy import select
+
+    user_result = await session.execute(
+        select(User).where(User.telegram_id == user_id)
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user:
+        name_result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user.id,
+                TaskResult.day_number == 1,
+                TaskResult.task_number == 2,
+                TaskResult.is_correct == True
+            ).order_by(TaskResult.completed_at.desc())
+        )
+        name_task = name_result.scalar_one_or_none()
+        if name_task and name_task.user_answer:
+            user_name = name_task.user_answer
+
     # Get task
     task = course_service.get_task(day_number, task_number)
 
@@ -222,31 +301,57 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ Задание не найдено", show_alert=True)
         return
 
-    # Get user's answer
-    options = task.get('options', [])
-    user_answer = None
-    for opt in options:
-        if opt.startswith(answer_letter + ")"):
-            user_answer = opt
-            break
+    # Special handling for audio task with "completed" button
+    if answer_letter == "completed" and task.get('type') == 'audio':
+        # Audio task completed - always mark as correct
+        is_correct = True
+        user_answer = "Прослушал(а)"
+        correct_answer = "completed"
 
-    # Get correct answer
-    correct_answer = task.get('correct_answer', '')
+        # Save result to database
+        await task_service.save_task_result(
+            session=session,
+            telegram_id=user_id,
+            day_number=day_number,
+            task_number=task_number,
+            task_type=TaskType.CHOICE,  # Use CHOICE for audio tasks
+            is_correct=is_correct,
+            user_answer=user_answer,
+            correct_answer=correct_answer
+        )
+    else:
+        # Regular choice/dialog task
+        # Get user's answer
+        options = task.get('options', [])
+        user_answer = None
+        for opt in options:
+            if opt.startswith(answer_letter + ")"):
+                user_answer = opt
+                break
 
-    # Check if correct
-    is_correct = user_answer == correct_answer
+        # Get correct answer
+        correct_answer = task.get('correct_answer', '')
 
-    # Save result to database (this will increment attempts)
-    await task_service.save_task_result(
-        session=session,
-        telegram_id=user_id,
-        day_number=day_number,
-        task_number=task_number,
-        task_type=TaskType.CHOICE if task.get('type') == 'choice' else TaskType.DIALOG,
-        is_correct=is_correct,
-        user_answer=user_answer,
-        correct_answer=correct_answer
-    )
+        # Check if correct - compare only the letter part
+        # user_answer format: "A) Some text"
+        # correct_answer format: "A" or "A) Some text"
+        is_correct = False
+        if user_answer:
+            user_letter = user_answer.split(")")[0].strip()  # Extract "A" from "A) text"
+            correct_letter = correct_answer.split(")")[0].strip()  # Extract "A" from "A" or "A) text"
+            is_correct = user_letter == correct_letter
+
+        # Save result to database (this will increment attempts)
+        await task_service.save_task_result(
+            session=session,
+            telegram_id=user_id,
+            day_number=day_number,
+            task_number=task_number,
+            task_type=TaskType.CHOICE if task.get('type') == 'choice' else TaskType.DIALOG,
+            is_correct=is_correct,
+            user_answer=user_answer,
+            correct_answer=correct_answer
+        )
 
     # Get total tasks for this day
     all_tasks = course_service.get_day_tasks(day_number)
@@ -256,36 +361,81 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
         # Correct answer
         letter = course_service.get_code_letter(day_number) if task_number == total_tasks else ""
 
-        # Check if next task is voice - auto-transition
+        # Check if should auto-transition to next task
         next_task_number = task_number + 1
         if task_number < total_tasks:
             next_task = course_service.get_task(day_number, next_task_number)
             logger.info(f"Checking next task: day={day_number}, task={next_task_number}, type={next_task.get('type') if next_task else None}")
-            if next_task and next_task.get('type') == 'voice':
-                # Auto-transition to voice task
-                logger.info(f"Auto-transitioning to voice task {next_task_number} for user {user_id}")
+
+            # Auto-transition rules:
+            # 1. If next task is voice/audio - always auto-transition
+            # 2. For Day 2: auto-transition from task 1 to task 2, and task 2 to task 3
+            # 3. For Day 3: auto-transition from task 1, 2, 3 (show success only after task 4)
+            # 4. For Day 4: auto-transition from task 1-6 (show success only after task 7)
+            # 5. For Day 5: auto-transition from task 1-8 (show success only after task 9)
+            # 6. For Day 6: auto-transition from task 1-3 (show success only after task 4)
+            # 7. For Day 7: auto-transition from task 1-3 (show success only after task 4)
+            # 8. For Day 8: auto-transition from task 1-3 (show success only after task 4)
+            should_auto_transition = False
+            if next_task and next_task.get('type') in ['voice', 'audio']:
+                should_auto_transition = True
+            elif day_number == 2 and task_number in [1, 2]:
+                should_auto_transition = True
+            elif day_number == 3 and task_number in [1, 2, 3]:
+                should_auto_transition = True
+            elif day_number == 4 and task_number in [1, 2, 3, 4, 5, 6]:
+                should_auto_transition = True
+            elif day_number == 5 and task_number in [1, 2, 3, 4, 5, 6, 7, 8]:
+                should_auto_transition = True
+            elif day_number == 6 and task_number in [1, 2, 3]:
+                should_auto_transition = True
+            elif day_number == 7 and task_number in [1, 2, 3]:
+                should_auto_transition = True
+            elif day_number == 8 and task_number in [1, 2, 3]:
+                should_auto_transition = True
+            elif day_number == 9 and task_number in [1, 2]:
+                should_auto_transition = True
+
+            if should_auto_transition:
+                # Auto-transition to next task
+                logger.info(f"Auto-transitioning to task {next_task_number} for user {user_id}")
                 await callback.message.delete()
                 await show_task(callback.message, session, user_id, day_number, next_task_number)
                 await callback.answer("✅ Отлично!")
                 return
 
-        success_text = THEME_MESSAGES['task_correct'].format(
-            name=user_name,
-            letter=letter if letter else "progress",
-            day=day_number,
-            total_days=10,
-            code_fragment=letter
-        )
+        # Use custom success message from task if available, otherwise use template
+        custom_success = task.get('correct_message', '')
+        if custom_success:
+            # Replace placeholders in custom message
+            success_text = custom_success.replace('[Имя]', user_name).replace('Subject X', user_name)
+        else:
+            success_text = THEME_MESSAGES['task_correct'].format(
+                name=user_name,
+                letter=letter if letter else "progress",
+                day=day_number,
+                total_days=10,
+                code_fragment=letter
+            )
 
-        await callback.message.edit_text(
-            success_text,
-            parse_mode="Markdown",
-            reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, True)
-        )
+        # Check if message has text (can be edited) or media (need new message)
+        if callback.message.text:
+            await callback.message.edit_text(
+                success_text,
+                parse_mode="Markdown",
+                reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, True)
+            )
+        else:
+            # Message has media (audio, video, etc.), send new message
+            await callback.message.answer(
+                success_text,
+                parse_mode="Markdown",
+                reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, True)
+            )
 
     else:
         # Incorrect answer
-        hint = task.get('hints', ['Try again!'])[0] if task.get('hints') else 'Try again!'
+        hint = task.get('hint', 'Try again!')
 
         # Get current number of attempts AFTER saving
         current_attempts = await task_service.get_task_attempts(
@@ -298,17 +448,33 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
         # Calculate remaining attempts
         remaining_attempts = max(0, MAX_TASK_ATTEMPTS - current_attempts)
 
-        fail_text = THEME_MESSAGES['task_incorrect'].format(
-            hint=hint,
-            attempts=remaining_attempts,
-            name=user_name
-        )
+        # Use custom incorrect message from task if available, otherwise use template
+        custom_incorrect = task.get('incorrect_message', '')
+        if custom_incorrect:
+            # Replace placeholders in custom message
+            fail_text = custom_incorrect.replace('[Имя]', user_name).replace('Subject X', user_name)
+            fail_text += f"\n\n💡 Подсказка: {hint}\n🔄 Осталось попыток: {remaining_attempts}"
+        else:
+            fail_text = THEME_MESSAGES['task_incorrect'].format(
+                hint=hint,
+                attempts=remaining_attempts,
+                name=user_name
+            )
 
-        await callback.message.edit_text(
-            fail_text,
-            parse_mode="Markdown",
-            reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, False, remaining_attempts)
-        )
+        # Check if message has text (can be edited) or media (need new message)
+        if callback.message.text:
+            await callback.message.edit_text(
+                fail_text,
+                parse_mode="Markdown",
+                reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, False, remaining_attempts)
+            )
+        else:
+            # Message has media (audio, video, etc.), send new message
+            await callback.message.answer(
+                fail_text,
+                parse_mode="Markdown",
+                reply_markup=get_task_result_keyboard(day_number, task_number, total_tasks, False, remaining_attempts)
+            )
 
     await callback.answer()
 
@@ -421,23 +587,42 @@ async def handle_voice_message(message: Message, session: AsyncSession):
         day_number = user.current_day
         logger.info(f"User {user_id} current day: {day_number} (no task results yet)")
 
-    # Find voice task for current day (usually task #2)
-    voice_task = None
-    voice_task_number = None
+    # Find CURRENT voice task for this day
+    # Check which task user is on by looking at completed tasks
     tasks = course_service.get_day_tasks(day_number)
     logger.info(f"Found {len(tasks)} tasks for day {day_number}")
 
+    # Get completed tasks for this day
+    completed_result = await session.execute(
+        select(TaskResult)
+        .where(
+            TaskResult.user_id == user.id,
+            TaskResult.day_number == day_number,
+            TaskResult.is_correct == True
+        )
+    )
+    completed_tasks = completed_result.scalars().all()
+    completed_task_numbers = {t.task_number for t in completed_tasks}
+
+    # Find first incomplete voice task
+    voice_task = None
+    voice_task_number = None
     for task in tasks:
-        if task.get('type') == 'voice':
+        if task.get('type') == 'voice' and task.get('task_number') not in completed_task_numbers:
             voice_task = task
             voice_task_number = task.get('task_number')
-            logger.info(f"Found voice task #{voice_task_number}")
+            logger.info(f"Found active voice task #{voice_task_number}")
             break
 
     if not voice_task:
-        logger.warning(f"No voice task found for day {day_number}")
-        await message.answer("🎤 Голосовое сообщение получено, но сейчас нет активного голосового задания")
+        logger.warning(f"No active voice task found for day {day_number}")
+        await message.answer("🎤 Голосовое сообщение получено, но нет активного голосового задания")
         return
+
+    # Get task configuration
+    voice_keywords = voice_task.get('voice_keywords', [])
+    extract_pattern = voice_task.get('voice_extract_pattern')  # name, country, profession, or None
+    hints = voice_task.get('hints', [])
 
     # Download voice message
     try:
@@ -452,8 +637,8 @@ async def handle_voice_message(message: Message, session: AsyncSession):
             temp_path = temp_file.name
             await message.bot.download_file(file.file_path, temp_path)
 
-        # Process voice with speech recognition
-        recognized_text, extracted_name, has_phrase = await speech_service.process_voice_message(temp_path)
+        # Transcribe audio
+        recognized_text = await speech_service.transcribe_audio(temp_path)
 
         # Cleanup temp file
         try:
@@ -477,36 +662,58 @@ async def handle_voice_message(message: Message, session: AsyncSession):
             logger.warning(f"Voice recognition failed for user {user_id}")
             return
 
-        # Check if required phrase was detected
-        if not has_phrase:
+        # Check if required keywords found
+        text_lower = recognized_text.lower()
+        has_keyword = any(keyword in text_lower for keyword in voice_keywords) if voice_keywords else True
+
+        if not has_keyword:
+            hint_text = hints[0] if hints else "Try again!"
             await message.answer(
-                f"❌ **Фраза 'My name is' не обнаружена**\n\n"
+                f"❌ **Требуемая фраза не обнаружена**\n\n"
                 f"Я услышал: _{recognized_text}_\n\n"
-                f"Пожалуйста, произнеси фразу **'My name is [твоё имя]'**",
+                f"{hint_text}",
                 parse_mode="Markdown"
             )
-            logger.info(f"Phrase not found. Recognized: {recognized_text}")
+            logger.info(f"Keywords not found. Recognized: {recognized_text}")
             return
 
-        # Check if name was extracted
-        if not extracted_name:
-            await message.answer(
-                f"❌ **Не удалось извлечь имя**\n\n"
-                f"Я услышал: _{recognized_text}_\n\n"
-                f"Убедись, что после 'My name is' произносишь свое имя",
-                parse_mode="Markdown"
-            )
-            logger.info(f"Name not extracted. Recognized: {recognized_text}")
-            return
+        # Extract data based on pattern (if pattern is specified)
+        extracted_value = None
+        if extract_pattern:
+            if extract_pattern == 'name':
+                extracted_value = speech_service.extract_name_from_text(recognized_text)
+            elif extract_pattern == 'country':
+                extracted_value = speech_service.extract_country_from_text(recognized_text)
+            elif extract_pattern == 'profession':
+                extracted_value = speech_service.extract_profession_from_text(recognized_text)
 
-        # Success! Save name to user profile
-        user.first_name = extracted_name
-        await session.commit()
+            # Check if extraction was successful
+            if not extracted_value:
+                hint_text = hints[1] if len(hints) > 1 else "Try again!"
+                await message.answer(
+                    f"❌ **Не удалось извлечь данные**\n\n"
+                    f"Я услышал: _{recognized_text}_\n\n"
+                    f"{hint_text}",
+                    parse_mode="Markdown"
+                )
+                logger.info(f"{extract_pattern} not extracted. Recognized: {recognized_text}")
+                return
 
-        logger.info(f"Successfully extracted name '{extracted_name}' from voice message (user {user_id})")
+            # Success! Save to user profile
+            if extract_pattern == 'name':
+                user.first_name = extracted_value
+            elif extract_pattern == 'country':
+                user.country = extracted_value
+            elif extract_pattern == 'profession':
+                user.profession = extracted_value
+
+            await session.commit()
+
+            logger.info(f"Successfully extracted {extract_pattern} '{extracted_value}' from voice (user {user_id})")
 
         # Mark task as correct
         is_correct = True
+        extracted_data = extracted_value if extracted_value else recognized_text
 
     except Exception as e:
         logger.error(f"Error processing voice message: {e}")
@@ -517,7 +724,7 @@ async def handle_voice_message(message: Message, session: AsyncSession):
         )
         return
 
-    # Save result
+    # Save result with extracted data as user_answer
     await task_service.save_task_result(
         session=session,
         telegram_id=user_id,
@@ -525,18 +732,44 @@ async def handle_voice_message(message: Message, session: AsyncSession):
         task_number=voice_task_number,
         task_type=TaskType.VOICE,
         is_correct=is_correct,
+        user_answer=extracted_data if extracted_data else None,
         voice_file_id=voice.file_id,
         voice_duration=voice.duration,
         recognized_text=recognized_text
     )
 
-    # Success message with extracted name
+    # Get user's name for personalization from Day 1 voice task
+    user_display_name = "Субъект X"
+    if extract_pattern == 'name':
+        # If this is the name task, use extracted name
+        user_display_name = extracted_data
+    else:
+        # Otherwise get name from Day 1 Task 2 results
+        name_result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user.id,
+                TaskResult.day_number == 1,
+                TaskResult.task_number == 2,
+                TaskResult.is_correct == True
+            ).order_by(TaskResult.completed_at.desc())
+        )
+        name_task = name_result.scalar_one_or_none()
+        if name_task and name_task.user_answer:
+            user_display_name = name_task.user_answer
+
+    # Success message
     total_tasks = len(tasks)
     letter = course_service.get_code_letter(day_number) if voice_task_number == total_tasks else ""
 
-    success_text = f"✅ **Отлично, {extracted_name}!**\n\nТы успешно прошёл голосовое задание."
-    if letter:
-        success_text += f"\n\n🔑 **Фрагмент кода:** `{letter}`"
+    # Use custom success message if available
+    custom_success = voice_task.get('correct_message', '')
+    if custom_success:
+        # Replace [Имя] placeholder with user's actual name
+        success_text = custom_success.replace('[Имя]', user_display_name)
+    else:
+        success_text = f"✅ **Отлично, {user_display_name}!**\n\nТы успешно прошёл голосовое задание."
+        if letter:
+            success_text += f"\n\n🔑 **Фрагмент кода:** `{letter}`"
 
     # Auto-transition to next task
     next_task_number = voice_task_number + 1
@@ -548,7 +781,7 @@ async def handle_voice_message(message: Message, session: AsyncSession):
         keyboard = get_task_result_keyboard(day_number, voice_task_number, total_tasks, True)
         await message.answer(success_text, parse_mode="Markdown", reply_markup=keyboard)
 
-    logger.info(f"Voice message from user {user_id}, duration: {voice.duration}s, name: {extracted_name}, accepted")
+    logger.info(f"Voice task completed by user {user_id}: {extract_pattern}='{extracted_data}'")
 
 
 @router.callback_query(F.data.startswith("voice_instructions_"))

@@ -138,9 +138,21 @@ class TaskService:
             )
             session.add(progress)
 
-        # Update stats
-        progress.completed_tasks += 1
-        progress.correct_answers += 1
+        # Check if this task was already completed correctly before
+        # (to avoid counting it multiple times)
+        task_result = await session.execute(
+            select(TaskResult).where(
+                TaskResult.user_id == user_id,
+                TaskResult.day_number == day_number,
+                TaskResult.task_number == task_number,
+                TaskResult.is_correct == True
+            )
+        )
+        # If this is the FIRST correct completion of this task, count it
+        previous_correct = task_result.scalars().all()
+        if len(previous_correct) == 1:  # Just saved this one
+            progress.completed_tasks += 1
+            progress.correct_answers += 1
 
         await session.commit()
 

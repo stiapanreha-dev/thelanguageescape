@@ -26,8 +26,8 @@ class CertificateService:
         if template_path:
             self.template_path = Path(template_path)
         else:
-            # Default template path
-            self.template_path = Path(__file__).parent.parent.parent / "docs" / "sert.png"
+            # Default template path - Purple and Blue Technology Certificate
+            self.template_path = Path(__file__).parent.parent.parent / "docs" / "certificate_template.png"
 
         if not self.template_path.exists():
             logger.error(f"Certificate template not found: {self.template_path}")
@@ -88,79 +88,66 @@ class CertificateService:
             # Get image dimensions
             width, height = img.size
 
-            # Colors (based on template)
-            color_cyan = "#00FFFF"  # Cyan for main text
-            color_pink = "#FF00FF"  # Pink/magenta for name
-            color_white = "#FFFFFF"
+            # Colors for new Purple and Blue template
+            color_white = "#FFFFFF"      # White for name
+            color_cyan = "#00D9FF"       # Cyan for additional info
+            color_light_blue = "#7FB5FF" # Light blue for date
 
-            # Calculate name size and choose appropriate font
-            name_upper = user_name.upper()
+            # User name (not uppercase for this template)
+            user_display_name = user_name
 
             # Try fonts from largest to smallest to fit the name
-            name_font = font_name_large
-            bbox = draw.textbbox((0, 0), name_upper, font=name_font)
+            name_font = font_name_medium  # Start with medium for elegance
+            bbox = draw.textbbox((0, 0), user_display_name, font=name_font)
             text_width = bbox[2] - bbox[0]
 
             # If too wide, use smaller font
-            if text_width > width * 0.8:
-                name_font = font_name_medium
-                bbox = draw.textbbox((0, 0), name_upper, font=name_font)
-                text_width = bbox[2] - bbox[0]
-
-            if text_width > width * 0.8:
+            if text_width > width * 0.7:
                 name_font = font_name_small
-                bbox = draw.textbbox((0, 0), name_upper, font=name_font)
+                bbox = draw.textbbox((0, 0), user_display_name, font=name_font)
                 text_width = bbox[2] - bbox[0]
 
-            # Position for user name (center, lower part of image)
-            # Based on template, the name should be in the lower third
+            # Position for user name
+            # Based on Purple and Blue template, name goes after "Dear" text
+            # "Dear" is at approximately y=139 (20% from top)
             name_x = width // 2
-            name_y = int(height * 0.72)  # Approximately where CYBERPUNK is in template
+            name_y = int(height * 0.38) + 100  # Adjusted 100px lower as requested
 
-            # Draw user name (centered, pink/magenta color)
+            # Draw user name (centered, white color)
             draw.text(
                 (name_x, name_y),
-                name_upper,
+                user_display_name,
                 font=name_font,
-                fill=color_pink,
+                fill=color_white,
                 anchor="mm"  # middle-middle (centered)
             )
 
             # Add completion info at the bottom
             if completion_date:
-                date_text = f"Completed: {completion_date.strftime('%d.%m.%Y')}"
+                date_text = f"{completion_date.strftime('%d.%m.%Y')}"
             else:
-                date_text = f"Completed: {datetime.now().strftime('%d.%m.%Y')}"
+                date_text = f"{datetime.now().strftime('%d.%m.%Y')}"
 
-            # Additional info
-            info_y = int(height * 0.88)
+            # Additional info positioned at the bottom
+            # Bottom section starts around 85% of height
+            bottom_start = int(height * 0.85)
 
-            # Code and accuracy
-            code_text = f"Code: {liberation_code}"
-            accuracy_text = f"Accuracy: {accuracy:.0f}%"
-
-            # Draw additional info (small, cyan)
+            # Liberation code (centered, cyan, slightly above bottom)
+            code_text = f"CODE: {liberation_code}"
             draw.text(
-                (width // 2, info_y),
+                (width // 2, bottom_start),
                 code_text,
                 font=font_text,
                 fill=color_cyan,
                 anchor="mm"
             )
 
+            # Completion date (centered, light blue)
             draw.text(
-                (width // 2, info_y + 30),
-                accuracy_text,
-                font=font_small,
-                fill=color_white,
-                anchor="mm"
-            )
-
-            draw.text(
-                (width // 2, info_y + 50),
+                (width // 2, bottom_start + 35),
                 date_text,
                 font=font_small,
-                fill=color_white,
+                fill=color_light_blue,
                 anchor="mm"
             )
 

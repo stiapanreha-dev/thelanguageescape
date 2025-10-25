@@ -33,7 +33,7 @@ from bot.config import (
 from bot.database.database import init_db, check_db_connection, get_session
 
 # Import handlers
-from bot.handlers import start, payment, course, tasks, admin
+from bot.handlers import start, payment, course, tasks, admin, inline
 from bot.handlers.payment import init_payment_service
 from bot.handlers.tasks import init_task_service
 
@@ -161,6 +161,7 @@ def register_handlers(dp: Dispatcher):
     dp.include_router(payment.router)
     dp.include_router(course.router)
     dp.include_router(tasks.router)
+    dp.include_router(inline.router)
 
     logger.info("✅ Handlers and middlewares registered")
 
