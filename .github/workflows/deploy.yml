@@ -44,6 +44,20 @@ jobs:
             pip install --upgrade pip
             pip install -r requirements.txt
 
+            # Run database migrations
+            echo "🗄️  Running database migrations..."
+            if [ -d "migrations" ] && [ "$(ls -A migrations/*.sql 2>/dev/null)" ]; then
+              export PGPASSWORD='BotSecure2024'
+              for migration in migrations/*.sql; do
+                echo "  Applying migration: $(basename $migration)"
+                psql -h localhost -U bot_user -d language_escape -f "$migration" || echo "  ⚠️  Migration $(basename $migration) failed or already applied"
+              done
+              unset PGPASSWORD
+              echo "✅ Migrations complete"
+            else
+              echo "⚠️  No migrations found, skipping"
+            fi
+
             # Setup webhook (if enabled)
             echo "🌐 Setting up webhook..."
             python3 scripts/setup_webhook.py setup || echo "⚠️  Webhook setup skipped (polling mode)"
