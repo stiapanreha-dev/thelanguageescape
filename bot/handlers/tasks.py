@@ -624,6 +624,11 @@ async def handle_voice_message(message: Message, session: AsyncSession):
     extract_pattern = voice_task.get('voice_extract_pattern')  # name, country, profession, or None
     hints = voice_task.get('hints', [])
 
+    # Initialize variables that will be used after try block
+    extracted_data = None
+    recognized_text = None
+    is_correct = False
+
     # Download voice message
     try:
         # Show processing message
