@@ -8,9 +8,10 @@ from typing import List
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram import Bot
+import pytz
 
 from bot.database.models import User, Reminder
-from bot.config import COURSE_DAYS
+from bot.config import COURSE_DAYS, TIMEZONE
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,15 @@ _Remember: Only 3 reminders per user. This is your last one._
             True if reminder sent successfully
         """
         try:
+            # Check if current time is within allowed hours (12:00-18:00)
+            tz = pytz.timezone(TIMEZONE)
+            now = datetime.now(tz)
+            current_hour = now.hour
+
+            if not (12 <= current_hour < 18):
+                logger.info(f"⏰ Skipping reminder for user {user.telegram_id}: outside allowed hours (current: {current_hour}:00, allowed: 12:00-18:00)")
+                return False
+
             # Get reminder count to determine which message to send
             reminder_count = await self.get_reminder_count(session, user.id)
 
