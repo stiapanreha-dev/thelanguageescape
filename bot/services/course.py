@@ -235,21 +235,28 @@ class CourseService:
         progress.completed_at = datetime.utcnow()
 
         # Add letter to liberation code at the correct position
-        letter = self.get_code_letter(day_number)
-        if letter:
-            # Build the code with underscores for incomplete positions
-            code_list = list('_' * len(LIBERATION_CODE))  # Start with all underscores
+        # Get ALL completed days from Progress table
+        all_progress_result = await session.execute(
+            select(Progress).where(
+                Progress.user_id == user.id,
+                Progress.tasks_completed == True
+            )
+        )
+        completed_progresses = all_progress_result.scalars().all()
 
-            # Fill in completed letters
-            for day in range(1, day_number + 1):
-                day_letter = self.get_code_letter(day)
-                if day_letter:
-                    code_list[day - 1] = day_letter
+        # Build the code with underscores for incomplete positions
+        code_list = list('_' * len(LIBERATION_CODE))  # Start with all underscores
 
-            user.liberation_code = ''.join(code_list)
+        # Fill in letters for ALL completed days
+        for prog in completed_progresses:
+            day_letter = self.get_code_letter(prog.day_number)
+            if day_letter and 1 <= prog.day_number <= len(LIBERATION_CODE):
+                code_list[prog.day_number - 1] = day_letter
 
-        # Update user stats
-        user.completed_days = day_number
+        user.liberation_code = ''.join(code_list)
+
+        # Update user stats - use maximum to prevent overwriting with smaller value
+        user.completed_days = max(user.completed_days, day_number)
 
         # Unlock next day
         if day_number < COURSE_DAYS:
