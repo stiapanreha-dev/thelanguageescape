@@ -43,6 +43,7 @@ class User(Base):
     # User profile data collected during course
     country = Column(String(255), nullable=True)  # From Day 2 Task 3
     profession = Column(String(255), nullable=True)  # From Day 2 Task 4
+    timezone = Column(String(50), default='Europe/Moscow', nullable=False)  # User's timezone
 
     # Access control
     has_access = Column(Boolean, default=False, nullable=False)
@@ -59,6 +60,7 @@ class User(Base):
     last_activity = Column(DateTime, default=datetime.utcnow)
     course_started_at = Column(DateTime, nullable=True)
     course_completed_at = Column(DateTime, nullable=True)
+    last_unlock_notification = Column(DateTime, nullable=True)  # Last time unlock notification was sent
 
     # Relationships
     payments = relationship('Payment', back_populates='user', cascade='all, delete-orphan')

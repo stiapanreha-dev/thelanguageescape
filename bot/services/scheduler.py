@@ -52,8 +52,8 @@ class SchedulerService:
     async def unlock_next_days_job(self):
         """
         Unlock next day for users who completed previous day
-        Runs at 9:00 AM Moscow time (UTC+3)
-        Sends notification to users about new day availability
+        Runs every hour (checks each user's local timezone)
+        Sends notification to users about new day availability (once per day, 12:00-18:00 user's local time)
         """
         try:
             logger.info("🔓 Running next day unlock job...")
@@ -61,6 +61,8 @@ class SchedulerService:
             from bot.database.models import User, Progress
             from bot.services.reminders import reminder_service
             from sqlalchemy import select, and_
+            from datetime import datetime, timedelta
+            import pytz
 
             async with async_session_maker() as session:
                 # Get users who:
@@ -81,6 +83,30 @@ class SchedulerService:
 
                 unlocked_count = 0
                 for user in users:
+                    # Check user's local time based on their timezone
+                    try:
+                        user_tz = pytz.timezone(user.timezone)
+                    except:
+                        # Fallback to Moscow time if timezone is invalid
+                        user_tz = pytz.timezone('Europe/Moscow')
+                        logger.warning(f"Invalid timezone '{user.timezone}' for user {user.telegram_id}, using Europe/Moscow")
+
+                    user_local_time = datetime.now(user_tz)
+                    user_hour = user_local_time.hour
+
+                    # Check if user's local time is within allowed hours (12:00-18:00)
+                    if not (12 <= user_hour < 18):
+                        logger.debug(f"⏰ Skipping user {user.telegram_id}: outside allowed hours (local time: {user_hour}:00)")
+                        continue
+
+                    # Check if notification was already sent today
+                    if user.last_unlock_notification:
+                        last_notification_date = user.last_unlock_notification.date()
+                        today = datetime.utcnow().date()
+                        if last_notification_date == today:
+                            logger.info(f"⏭️  Skipping user {user.telegram_id}: notification already sent today")
+                            continue
+
                     # Check if current day is completed
                     progress_result = await session.execute(
                         select(Progress).where(
@@ -97,6 +123,7 @@ class SchedulerService:
                         # Unlock next day
                         next_day = user.current_day + 1
                         user.current_day = next_day
+                        user.last_unlock_notification = datetime.utcnow()
                         unlocked_count += 1
 
                         # Send notification to user
@@ -164,12 +191,12 @@ Ready to continue? /day
             replace_existing=True
         )
 
-        # 2. Unlock next day at 9:00 AM Moscow time
+        # 2. Unlock next day every hour (checks user's local timezone)
         self.scheduler.add_job(
             self.unlock_next_days_job,
-            trigger=CronTrigger(hour=9, minute=0),
+            trigger=IntervalTrigger(hours=1),
             id='unlock_next_days',
-            name='Unlock next day for users who completed previous day',
+            name='Unlock next day for users who completed previous day (every hour)',
             replace_existing=True
         )
 
