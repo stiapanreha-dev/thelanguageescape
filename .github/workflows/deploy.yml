@@ -46,17 +46,32 @@ jobs:
 
             # Run database migrations
             echo "🗄️  Running database migrations..."
+
+            # Run Python migrations first
+            if [ -d "migrations" ] && [ "$(ls -A migrations/*.py 2>/dev/null)" ]; then
+              echo "  Running Python migrations..."
+              for migration in migrations/*.py; do
+                if [ -f "$migration" ]; then
+                  echo "  Applying migration: $(basename $migration)"
+                  python3 "$migration" || echo "  ⚠️  Migration $(basename $migration) failed or already applied"
+                fi
+              done
+            fi
+
+            # Run SQL migrations
             if [ -d "migrations" ] && [ "$(ls -A migrations/*.sql 2>/dev/null)" ]; then
+              echo "  Running SQL migrations..."
               export PGPASSWORD='BotSecure2024'
               for migration in migrations/*.sql; do
-                echo "  Applying migration: $(basename $migration)"
-                psql -h localhost -U bot_user -d language_escape -f "$migration" || echo "  ⚠️  Migration $(basename $migration) failed or already applied"
+                if [ -f "$migration" ]; then
+                  echo "  Applying migration: $(basename $migration)"
+                  psql -h localhost -U bot_user -d language_escape -f "$migration" || echo "  ⚠️  Migration $(basename $migration) failed or already applied"
+                fi
               done
               unset PGPASSWORD
-              echo "✅ Migrations complete"
-            else
-              echo "⚠️  No migrations found, skipping"
             fi
+
+            echo "✅ Migrations complete"
 
             # Setup webhook (if enabled)
             echo "🌐 Setting up webhook..."
