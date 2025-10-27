@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.config import COURSE_NAME, COURSE_PRICE, COURSE_CURRENCY, COURSE_DAYS, THEME_MESSAGES
 from bot.database.models import User, Payment, PaymentStatus, TaskResult
 from bot.keyboards.inline import get_welcome_keyboard, get_main_menu_keyboard
+from bot.utils.timezone_detector import detect_timezone_from_language
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,10 @@ async def cmd_start(message: Message, session: AsyncSession):
 
     else:
         # New user - create record
+        # Detect timezone from user's language
+        language_code = message.from_user.language_code
+        detected_timezone = detect_timezone_from_language(language_code)
+
         new_user = User(
             telegram_id=user_id,
             username=username,
@@ -166,11 +171,12 @@ async def cmd_start(message: Message, session: AsyncSession):
             last_name=last_name,
             has_access=False,
             current_day=0,
+            timezone=detected_timezone,
         )
         session.add(new_user)
         await session.commit()
 
-        logger.info(f"✅ New user registered: {user_id} ({first_name})")
+        logger.info(f"✅ New user registered: {user_id} ({first_name}), language: {language_code}, timezone: {detected_timezone}")
 
         # Send welcome message
         await send_welcome_message(message, "Субъект X", is_new=True)
