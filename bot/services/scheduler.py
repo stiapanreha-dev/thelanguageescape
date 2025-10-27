@@ -110,7 +110,7 @@ class SchedulerService:
 You've completed Day {next_day - 1} yesterday. The simulation continues...
 
 🔓 **Your next mission awaits**
-🔑 **Liberation Code Progress:** `{user.liberation_code}`
+🔑 **Code Progress:** `{user.liberation_code}`
 
 Ready to continue? /day
 """
