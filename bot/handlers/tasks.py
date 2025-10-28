@@ -811,10 +811,10 @@ async def handle_voice_message(message: Message, session: AsyncSession):
     # Auto-transition to next task
     next_task_number = voice_task_number + 1
     if voice_task_number < total_tasks:
-        await message.answer(success_text, parse_mode="Markdown")
+        # Not last task - transition directly without success message
         await show_task(message, session, user_id, day_number, next_task_number)
     else:
-        # Last task - show completion
+        # Last task - show completion with code letter
         keyboard = get_task_result_keyboard(day_number, voice_task_number, total_tasks, True)
         await message.answer(success_text, parse_mode="Markdown", reply_markup=keyboard)
 
