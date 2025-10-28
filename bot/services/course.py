@@ -65,6 +65,13 @@ class CourseService:
             return day_data.get('title', f'Day {day_number}')
         return f'Day {day_number}'
 
+    def get_day_description(self, day_number: int) -> Optional[str]:
+        """Get description for a day"""
+        day_data = self.get_day_data(day_number)
+        if day_data:
+            return day_data.get('description')
+        return None
+
     def get_day_video_path(self, day_number: int) -> Optional[str]:
         """Get video file path for a day"""
         day_data = self.get_day_data(day_number)

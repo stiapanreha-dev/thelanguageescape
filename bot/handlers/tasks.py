@@ -220,7 +220,15 @@ async def show_task(
 
     elif task_type == 'voice':
         # Voice task
-        task_text = f"""
+        # Try to get full instruction from JSON first
+        instruction = task.get('instruction')
+
+        if instruction:
+            # Use instruction from JSON with name substitution
+            task_text = instruction.replace('[Имя]', user_name).replace('[имя]', user_name)
+        else:
+            # Fallback to hardcoded template (for backward compatibility)
+            task_text = f"""
 🎤 **Голосовое задание {task_number}/{len(course_service.get_day_tasks(day_number))}**
 
 **{question}**

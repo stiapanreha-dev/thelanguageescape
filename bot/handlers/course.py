@@ -107,12 +107,20 @@ async def show_day(
             user_name = task_result.user_answer
 
     # Format day message
-    day_text = THEME_MESSAGES['day_start'].format(
-        day=day_number,
-        total_days=COURSE_DAYS,
-        title=day_title,
-        name=user_name
-    )
+    # Try to get description from JSON first
+    day_description = course_service.get_day_description(day_number)
+
+    if day_description:
+        # Use description from JSON with name substitution
+        day_text = day_description.replace('[Имя]', user_name).replace('[имя]', user_name)
+    else:
+        # Fallback to template from config.py
+        day_text = THEME_MESSAGES['day_start'].format(
+            day=day_number,
+            total_days=COURSE_DAYS,
+            title=day_title,
+            name=user_name
+        )
 
     # Check what materials are available
     has_video = course_service.get_day_video_path(day_number) is not None
