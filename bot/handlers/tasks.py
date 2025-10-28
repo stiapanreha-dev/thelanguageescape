@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import THEME_MESSAGES, MAX_TASK_ATTEMPTS
+from bot.config import THEME_MESSAGES, MAX_TASK_ATTEMPTS, MATERIALS_PATH
 from bot.database.models import User, Progress, TaskResult, TaskType
 from bot.services.course import course_service
 from bot.services.tasks import TaskService
@@ -141,34 +141,46 @@ async def show_task(
         keyboard = get_task_keyboard(day_number, task_number, options)
 
         # Send media if available
-        if media and os.path.exists(media):
+        if media:
             from aiogram.types import FSInputFile
 
-            # Determine media type by extension
-            if media.lower().endswith(('.mp4', '.mov', '.avi')):
-                # Send as animation (GIF) - plays once without controls
-                video = FSInputFile(media)
-                await message.answer_animation(
-                    animation=video,
-                    caption=task_text,
-                    parse_mode="Markdown",
-                    reply_markup=keyboard
-                )
-            elif media.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                # Send photo with caption
-                photo = FSInputFile(media)
-                await message.answer_photo(
-                    photo,
-                    caption=task_text,
-                    parse_mode="Markdown",
-                    reply_markup=keyboard
-                )
+            # Resolve path relative to MATERIALS_PATH
+            full_path = MATERIALS_PATH / media
+
+            if full_path.exists():
+                # Determine media type by extension
+                if media.lower().endswith(('.mp4', '.mov', '.avi')):
+                    # Send as animation (GIF) - plays once without controls
+                    video = FSInputFile(full_path)
+                    await message.answer_animation(
+                        animation=video,
+                        caption=task_text,
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                elif media.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                    # Send photo with caption
+                    photo = FSInputFile(full_path)
+                    await message.answer_photo(
+                        photo,
+                        caption=task_text,
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                else:
+                    # Unknown media type, send as document
+                    doc = FSInputFile(full_path)
+                    await message.answer_document(
+                        doc,
+                        caption=task_text,
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
             else:
-                # Unknown media type, send as document
-                doc = FSInputFile(media)
-                await message.answer_document(
-                    doc,
-                    caption=task_text,
+                # Media file not found, send text only with warning
+                logger.warning(f"Media file not found: {full_path}")
+                await message.answer(
+                    task_text,
                     parse_mode="Markdown",
                     reply_markup=keyboard
                 )
@@ -200,16 +212,28 @@ async def show_task(
             keyboard = get_task_keyboard(day_number, task_number, options)
 
         # Send audio if available
-        if media and os.path.exists(media):
+        if media:
             from aiogram.types import FSInputFile
 
-            audio = FSInputFile(media)
-            await message.answer_audio(
-                audio=audio,
-                caption=task_text,
-                parse_mode="Markdown",
-                reply_markup=keyboard
-            )
+            # Resolve path relative to MATERIALS_PATH
+            full_path = MATERIALS_PATH / media
+
+            if full_path.exists():
+                audio = FSInputFile(full_path)
+                await message.answer_audio(
+                    audio=audio,
+                    caption=task_text,
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
+            else:
+                # Audio file not found, send text only with warning
+                logger.warning(f"Audio file not found: {full_path}")
+                await message.answer(
+                    task_text,
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
         else:
             # No audio file, send text only
             await message.answer(
