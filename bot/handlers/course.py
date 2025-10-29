@@ -112,7 +112,18 @@ async def show_day(
 
     if day_description:
         # Use description from JSON with name substitution
-        day_text = day_description.replace('[Имя]', user_name).replace('[имя]', user_name)
+        description_text = day_description.replace('[Имя]', user_name).replace('[имя]', user_name)
+
+        # Format full message with header, description, and footer
+        day_text = f"""⚡️ **День {day_number}/{COURSE_DAYS}: {day_title}**
+
+{description_text}
+
+🎥 Посмотри брифинг
+📄 Прочитай разведданные
+✅ Выполни испытания
+
+**Время взломать систему.**"""
     else:
         # Fallback to template from config.py
         day_text = THEME_MESSAGES['day_start'].format(
