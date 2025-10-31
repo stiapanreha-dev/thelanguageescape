@@ -11,7 +11,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import ADMIN_TELEGRAM_ID
-from bot.database.models import User, Payment, PaymentStatus, Progress, TaskResult
+from bot.database.models import User, Payment, PaymentStatus, Progress, TaskResult, Certificate, Reminder
 from bot.keyboards.inline import get_admin_keyboard
 from bot.middlewares.admin import admin_required
 
@@ -657,17 +657,15 @@ async def cmd_reset_progress(message: Message, is_admin: bool, session: AsyncSes
     )
     prog_count = progress_count.scalar()
 
-    certificates_count = await session.execute(
-        select(func.count()).select_from(
-            select(1).where(Certificate.user_id == user.id).subquery()
-        )
+    certificates_result = await session.execute(
+        select(func.count(Certificate.id)).where(Certificate.user_id == user.id)
     )
-    cert_count = certificates_count.scalar()
+    cert_count = certificates_result.scalar()
 
     # Reset user progress
     user.current_day = 0
     user.completed_days = 0
-    user.liberation_code = '___________'
+    user.liberation_code = '__________'  # 10 underscores for "LIBERATION"
     user.course_started_at = None
     user.course_completed_at = None
 
@@ -689,7 +687,6 @@ async def cmd_reset_progress(message: Message, is_admin: bool, session: AsyncSes
         await session.delete(progress)
 
     # Delete certificates
-    from bot.database.models import Certificate
     delete_certs = await session.execute(
         select(Certificate).where(Certificate.user_id == user.id)
     )
@@ -697,7 +694,6 @@ async def cmd_reset_progress(message: Message, is_admin: bool, session: AsyncSes
         await session.delete(cert)
 
     # Delete reminders
-    from bot.database.models import Reminder
     delete_reminders = await session.execute(
         select(Reminder).where(Reminder.user_id == user.id)
     )
@@ -714,7 +710,7 @@ async def cmd_reset_progress(message: Message, is_admin: bool, session: AsyncSes
         f"**Old Progress:**\n"
         f"• Current Day: {old_current_day} → 0\n"
         f"• Completed Days: {old_completed_days} → 0\n"
-        f"• Liberation Code: `{old_code}` → `___________`\n\n"
+        f"• Liberation Code: `{old_code}` → `__________`\n\n"
         f"**Deleted:**\n"
         f"• Task Results: {task_count}\n"
         f"• Progress Records: {prog_count}\n"
@@ -841,7 +837,6 @@ async def cmd_user_info(message: Message, is_admin: bool, session: AsyncSession)
     reminders_count = reminders_result.scalar()
 
     # Certificates
-    from bot.database.models import Certificate
     certificates_result = await session.execute(
         select(Certificate).where(Certificate.user_id == user.id)
     )
