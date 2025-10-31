@@ -663,7 +663,7 @@ async def cmd_reset_progress(message: Message, is_admin: bool, session: AsyncSes
     cert_count = certificates_result.scalar()
 
     # Reset user progress
-    user.current_day = 0
+    user.current_day = 1  # Start from Day 1 (not 0)
     user.completed_days = 0
     user.liberation_code = '__________'  # 10 underscores for "LIBERATION"
     user.course_started_at = None
@@ -708,7 +708,7 @@ async def cmd_reset_progress(message: Message, is_admin: bool, session: AsyncSes
         f"**User:** `{target_telegram_id}` (@{user.username or 'N/A'})\n"
         f"**Name:** {user.first_name or 'N/A'} {user.last_name or ''}\n\n"
         f"**Old Progress:**\n"
-        f"• Current Day: {old_current_day} → 0\n"
+        f"• Current Day: {old_current_day} → 1\n"
         f"• Completed Days: {old_completed_days} → 0\n"
         f"• Liberation Code: `{old_code}` → `__________`\n\n"
         f"**Deleted:**\n"
