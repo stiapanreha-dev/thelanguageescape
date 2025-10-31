@@ -57,7 +57,7 @@ async def inline_share_certificate(inline_query: InlineQuery, session: AsyncSess
 
 💡 Присоединяйся к курсу английского языка в киберпанк стилистике!
 
-🌟 Начни обучение: @thelanguageescape_bot"""
+🌟 Начни обучение: @languageescape_bot"""
 
         # Create inline result with cached photo
         results = [

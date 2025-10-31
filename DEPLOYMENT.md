@@ -155,7 +155,7 @@ nano .env
 
 **Обязательно заполните:**
 ```env
-TELEGRAM_BOT_TOKEN=7508397944:AAF-ebcEl-yBfSgZVkBq0tESKKiTI5uLgzE
+TELEGRAM_BOT_TOKEN=8289801372:AAHfFISNCTRJ7Cmv5DsW4XEkv0GKaz0REdE
 ADMIN_TELEGRAM_ID=ваш_telegram_id
 YOOKASSA_PROVIDER_TOKEN=ваш_provider_token
 ```

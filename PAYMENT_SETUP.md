@@ -80,7 +80,7 @@ cp .env.example .env
 
 ```env
 # Telegram Bot
-TELEGRAM_BOT_TOKEN=7508397944:AAF-ebcEl-yBfSgZVkBq0tESKKiTI5uLgzE
+TELEGRAM_BOT_TOKEN=8289801372:AAHfFISNCTRJ7Cmv5DsW4XEkv0GKaz0REdE
 
 # YooKassa Provider Token (Telegram Payments)
 YOOKASSA_PROVIDER_TOKEN=1234567890:TEST-your_test_token_here
