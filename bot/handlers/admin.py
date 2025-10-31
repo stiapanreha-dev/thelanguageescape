@@ -36,6 +36,7 @@ Use the buttons below to manage the bot:
 👥 **Users** - View user statistics
 💰 **Payments** - Payment analytics
 📊 **Progress** - Course progress stats
+🔧 **Management** - User management commands
 📢 **Broadcast** - Send message to all users
 
 Admin ID: `{message.from_user.id}`
@@ -319,6 +320,53 @@ async def callback_admin_progress(callback: CallbackQuery, is_admin: bool, sessi
     await callback.answer()
 
 
+@router.callback_query(F.data == "admin_management")
+@admin_required
+async def callback_admin_management(callback: CallbackQuery, is_admin: bool):
+    """
+    User management commands info
+    """
+    management_text = """
+🔧 **User Management Commands**
+
+**Available Commands:**
+
+**1. Grant Access**
+`/grant_access <telegram_id>`
+• Give course access to a user
+• Automatically starts from Day 1
+• Sends notification to user
+
+**2. Reset Progress**
+`/reset_progress <telegram_id>`
+• Delete all user progress
+• Resets to Day 0
+• Keeps access active
+• ⚠️ Cannot be undone!
+
+**3. User Info**
+`/user_info <telegram_id>`
+• View detailed user information
+• Shows progress, stats, payments
+• Activity status
+• Certificates
+
+**Examples:**
+`/grant_access 123456789`
+`/reset_progress 123456789`
+`/user_info 123456789`
+
+**Note:** You need the user's Telegram ID to use these commands.
+"""
+
+    await callback.message.edit_text(
+        management_text,
+        parse_mode="Markdown",
+        reply_markup=get_admin_keyboard()
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin_broadcast")
 @admin_required
 async def callback_admin_broadcast(callback: CallbackQuery, is_admin: bool):
@@ -439,3 +487,444 @@ Config Admin ID: `{ADMIN_TELEGRAM_ID or 'Not set'}`
 """
 
     await message.answer(status_text, parse_mode="Markdown")
+
+
+@router.message(Command("grant_access"))
+@admin_required
+async def cmd_grant_access(message: Message, is_admin: bool, session: AsyncSession):
+    """
+    Grant course access to user
+    Usage: /grant_access <telegram_id>
+    """
+    # Parse telegram_id from command
+    args = message.text.split()
+
+    if len(args) < 2:
+        await message.answer(
+            "❌ **Usage Error**\n\n"
+            "Please provide Telegram ID:\n"
+            "`/grant_access <telegram_id>`\n\n"
+            "**Example:**\n"
+            "`/grant_access 123456789`",
+            parse_mode="Markdown"
+        )
+        return
+
+    try:
+        target_telegram_id = int(args[1])
+    except ValueError:
+        await message.answer(
+            "❌ **Invalid Telegram ID**\n\n"
+            "Telegram ID must be a number.\n\n"
+            "**Example:**\n"
+            "`/grant_access 123456789`",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Find user
+    result = await session.execute(
+        select(User).where(User.telegram_id == target_telegram_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        await message.answer(
+            f"❌ **User Not Found**\n\n"
+            f"User with Telegram ID `{target_telegram_id}` not found in database.\n\n"
+            f"**Note:** User must start the bot first (`/start`)",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Check if already has access
+    if user.has_access:
+        await message.answer(
+            f"ℹ️ **Already Has Access**\n\n"
+            f"User `{target_telegram_id}` (@{user.username or 'N/A'}) already has course access.\n\n"
+            f"**Current Status:**\n"
+            f"• Name: {user.first_name or 'N/A'} {user.last_name or ''}\n"
+            f"• Current Day: {user.current_day}\n"
+            f"• Completed Days: {user.completed_days}",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Grant access
+    user.has_access = True
+    user.current_day = 1  # Start from day 1
+
+    if not user.course_started_at:
+        user.course_started_at = datetime.utcnow()
+
+    await session.commit()
+
+    # Send confirmation
+    await message.answer(
+        f"✅ **Access Granted**\n\n"
+        f"User `{target_telegram_id}` (@{user.username or 'N/A'}) now has course access.\n\n"
+        f"**User Info:**\n"
+        f"• Name: {user.first_name or 'N/A'} {user.last_name or ''}\n"
+        f"• Current Day: {user.current_day}\n"
+        f"• Started At: {user.course_started_at.strftime('%Y-%m-%d %H:%M:%S') if user.course_started_at else 'Just now'}",
+        parse_mode="Markdown"
+    )
+
+    # Notify user
+    try:
+        await message.bot.send_message(
+            chat_id=target_telegram_id,
+            text="""
+🎉 **Добро пожаловать в The Language Escape!**
+
+Вам предоставлен доступ к курсу администратором.
+
+🚀 **Начните прямо сейчас:**
+/day - Начать День 1
+
+Удачи в прохождении курса!
+""",
+            parse_mode="Markdown"
+        )
+        logger.info(f"Sent access notification to user {target_telegram_id}")
+    except Exception as e:
+        logger.error(f"Failed to notify user {target_telegram_id}: {e}")
+
+    logger.info(f"Admin {message.from_user.id} granted access to user {target_telegram_id}")
+
+
+@router.message(Command("reset_progress"))
+@admin_required
+async def cmd_reset_progress(message: Message, is_admin: bool, session: AsyncSession):
+    """
+    Reset user's course progress
+    Usage: /reset_progress <telegram_id>
+    """
+    # Parse telegram_id from command
+    args = message.text.split()
+
+    if len(args) < 2:
+        await message.answer(
+            "❌ **Usage Error**\n\n"
+            "Please provide Telegram ID:\n"
+            "`/reset_progress <telegram_id>`\n\n"
+            "**Example:**\n"
+            "`/reset_progress 123456789`\n\n"
+            "⚠️ **Warning:** This will delete ALL progress data for the user!",
+            parse_mode="Markdown"
+        )
+        return
+
+    try:
+        target_telegram_id = int(args[1])
+    except ValueError:
+        await message.answer(
+            "❌ **Invalid Telegram ID**\n\n"
+            "Telegram ID must be a number.\n\n"
+            "**Example:**\n"
+            "`/reset_progress 123456789`",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Find user
+    result = await session.execute(
+        select(User).where(User.telegram_id == target_telegram_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        await message.answer(
+            f"❌ **User Not Found**\n\n"
+            f"User with Telegram ID `{target_telegram_id}` not found in database.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Store old data for confirmation message
+    old_current_day = user.current_day
+    old_completed_days = user.completed_days
+    old_code = user.liberation_code
+
+    # Get counts before deletion
+    task_results_count = await session.execute(
+        select(func.count(TaskResult.id)).where(TaskResult.user_id == user.id)
+    )
+    task_count = task_results_count.scalar()
+
+    progress_count = await session.execute(
+        select(func.count(Progress.id)).where(Progress.user_id == user.id)
+    )
+    prog_count = progress_count.scalar()
+
+    certificates_count = await session.execute(
+        select(func.count()).select_from(
+            select(1).where(Certificate.user_id == user.id).subquery()
+        )
+    )
+    cert_count = certificates_count.scalar()
+
+    # Reset user progress
+    user.current_day = 0
+    user.completed_days = 0
+    user.liberation_code = '___________'
+    user.course_started_at = None
+    user.course_completed_at = None
+
+    # Delete task results
+    await session.execute(
+        select(TaskResult).where(TaskResult.user_id == user.id)
+    )
+    delete_tasks = await session.execute(
+        select(TaskResult).where(TaskResult.user_id == user.id)
+    )
+    for task_result in delete_tasks.scalars().all():
+        await session.delete(task_result)
+
+    # Delete progress records
+    delete_progress = await session.execute(
+        select(Progress).where(Progress.user_id == user.id)
+    )
+    for progress in delete_progress.scalars().all():
+        await session.delete(progress)
+
+    # Delete certificates
+    from bot.database.models import Certificate
+    delete_certs = await session.execute(
+        select(Certificate).where(Certificate.user_id == user.id)
+    )
+    for cert in delete_certs.scalars().all():
+        await session.delete(cert)
+
+    # Delete reminders
+    from bot.database.models import Reminder
+    delete_reminders = await session.execute(
+        select(Reminder).where(Reminder.user_id == user.id)
+    )
+    for reminder in delete_reminders.scalars().all():
+        await session.delete(reminder)
+
+    await session.commit()
+
+    # Send confirmation
+    await message.answer(
+        f"✅ **Progress Reset Complete**\n\n"
+        f"**User:** `{target_telegram_id}` (@{user.username or 'N/A'})\n"
+        f"**Name:** {user.first_name or 'N/A'} {user.last_name or ''}\n\n"
+        f"**Old Progress:**\n"
+        f"• Current Day: {old_current_day} → 0\n"
+        f"• Completed Days: {old_completed_days} → 0\n"
+        f"• Liberation Code: `{old_code}` → `___________`\n\n"
+        f"**Deleted:**\n"
+        f"• Task Results: {task_count}\n"
+        f"• Progress Records: {prog_count}\n"
+        f"• Certificates: {cert_count}\n"
+        f"• Reminders: cleared\n\n"
+        f"⚠️ User still has access to course. To start again, they can use /day",
+        parse_mode="Markdown"
+    )
+
+    # Notify user
+    try:
+        await message.bot.send_message(
+            chat_id=target_telegram_id,
+            text="""
+🔄 **Ваш прогресс был сброшен**
+
+Администратор сбросил ваш прогресс по курсу.
+
+Вы можете начать заново:
+/day - Начать с Дня 1
+
+Удачи!
+""",
+            parse_mode="Markdown"
+        )
+        logger.info(f"Sent reset notification to user {target_telegram_id}")
+    except Exception as e:
+        logger.error(f"Failed to notify user {target_telegram_id}: {e}")
+
+    logger.info(f"Admin {message.from_user.id} reset progress for user {target_telegram_id}")
+
+
+@router.message(Command("user_info"))
+@admin_required
+async def cmd_user_info(message: Message, is_admin: bool, session: AsyncSession):
+    """
+    Get detailed user information
+    Usage: /user_info <telegram_id>
+    """
+    # Parse telegram_id from command
+    args = message.text.split()
+
+    if len(args) < 2:
+        await message.answer(
+            "❌ **Usage Error**\n\n"
+            "Please provide Telegram ID:\n"
+            "`/user_info <telegram_id>`\n\n"
+            "**Example:**\n"
+            "`/user_info 123456789`",
+            parse_mode="Markdown"
+        )
+        return
+
+    try:
+        target_telegram_id = int(args[1])
+    except ValueError:
+        await message.answer(
+            "❌ **Invalid Telegram ID**\n\n"
+            "Telegram ID must be a number.\n\n"
+            "**Example:**\n"
+            "`/user_info 123456789`",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Find user
+    result = await session.execute(
+        select(User).where(User.telegram_id == target_telegram_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        await message.answer(
+            f"❌ **User Not Found**\n\n"
+            f"User with Telegram ID `{target_telegram_id}` not found in database.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Get statistics
+    # Total tasks attempted
+    total_tasks_result = await session.execute(
+        select(func.count(TaskResult.id)).where(TaskResult.user_id == user.id)
+    )
+    total_tasks = total_tasks_result.scalar()
+
+    # Correct answers
+    correct_tasks_result = await session.execute(
+        select(func.count(TaskResult.id)).where(
+            TaskResult.user_id == user.id,
+            TaskResult.is_correct == True
+        )
+    )
+    correct_tasks = correct_tasks_result.scalar()
+
+    # Progress records
+    progress_result = await session.execute(
+        select(func.count(Progress.id)).where(Progress.user_id == user.id)
+    )
+    progress_count = progress_result.scalar()
+
+    # Completed days count
+    completed_progress_result = await session.execute(
+        select(func.count(Progress.id)).where(
+            Progress.user_id == user.id,
+            Progress.tasks_completed == True
+        )
+    )
+    completed_days_count = completed_progress_result.scalar()
+
+    # Payments
+    payments_result = await session.execute(
+        select(Payment).where(Payment.user_id == user.id).order_by(Payment.created_at.desc())
+    )
+    payments = payments_result.scalars().all()
+
+    # Reminders
+    reminders_result = await session.execute(
+        select(func.count(Reminder.id)).where(
+            Reminder.user_id == user.id,
+            Reminder.sent == True
+        )
+    )
+    reminders_count = reminders_result.scalar()
+
+    # Certificates
+    from bot.database.models import Certificate
+    certificates_result = await session.execute(
+        select(Certificate).where(Certificate.user_id == user.id)
+    )
+    certificates = certificates_result.scalars().all()
+
+    # Calculate accuracy
+    accuracy = (correct_tasks / total_tasks * 100) if total_tasks > 0 else 0
+
+    # Calculate activity
+    if user.last_activity:
+        inactive_hours = (datetime.utcnow() - user.last_activity).total_seconds() / 3600
+        if inactive_hours < 1:
+            activity_status = "🟢 Active (< 1h)"
+        elif inactive_hours < 24:
+            activity_status = f"🟡 Inactive {int(inactive_hours)}h"
+        else:
+            activity_status = f"🔴 Inactive {int(inactive_hours / 24)}d"
+    else:
+        activity_status = "⚪ Never active"
+
+    # Build info message
+    info_text = f"""
+👤 **User Information**
+
+**Basic Info:**
+• Telegram ID: `{user.telegram_id}`
+• Username: @{user.username or 'N/A'}
+• Name: {user.first_name or 'N/A'} {user.last_name or ''}
+• Email: {user.email or 'N/A'}
+
+**Profile:**
+• Country: {user.country or 'N/A'}
+• Profession: {user.profession or 'N/A'}
+• Timezone: {user.timezone}
+
+**Access:**
+• Has Access: {'✅ Yes' if user.has_access else '❌ No'}
+• Is Admin: {'✅ Yes' if user.is_admin else '❌ No'}
+
+**Course Progress:**
+• Current Day: {user.current_day}/10
+• Completed Days: {user.completed_days}/10
+• Liberation Code: `{user.liberation_code}`
+
+**Activity:**
+• Status: {activity_status}
+• Created: {user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else 'N/A'}
+• Last Activity: {user.last_activity.strftime('%Y-%m-%d %H:%M') if user.last_activity else 'Never'}
+• Course Started: {user.course_started_at.strftime('%Y-%m-%d %H:%M') if user.course_started_at else 'Not started'}
+• Course Completed: {user.course_completed_at.strftime('%Y-%m-%d %H:%M') if user.course_completed_at else 'Not completed'}
+
+**Statistics:**
+• Total Tasks: {total_tasks}
+• Correct Answers: {correct_tasks}
+• Accuracy: {accuracy:.1f}%
+• Progress Records: {progress_count}
+• Completed Days: {completed_days_count}
+• Reminders Sent: {reminders_count}
+
+**Payments:**
+"""
+
+    if payments:
+        for payment in payments[:3]:  # Show last 3 payments
+            info_text += f"• {payment.amount} {payment.currency} - {payment.status.value} ({payment.created_at.strftime('%Y-%m-%d')})\n"
+        if len(payments) > 3:
+            info_text += f"• ... and {len(payments) - 3} more\n"
+    else:
+        info_text += "• No payments\n"
+
+    info_text += f"\n**Certificates:**\n"
+    if certificates:
+        for cert in certificates:
+            info_text += f"• Code: `{cert.certificate_code}` - Accuracy: {cert.accuracy:.1f}%\n"
+    else:
+        info_text += "• No certificates\n"
+
+    # Add management commands
+    info_text += f"""
+**Management:**
+• Grant Access: `/grant_access {user.telegram_id}`
+• Reset Progress: `/reset_progress {user.telegram_id}`
+"""
+
+    await message.answer(info_text, parse_mode="Markdown")
+    logger.info(f"Admin {message.from_user.id} viewed info for user {target_telegram_id}")

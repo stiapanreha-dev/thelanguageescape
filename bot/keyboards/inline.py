@@ -378,6 +378,10 @@ def get_admin_keyboard() -> InlineKeyboardMarkup:
             callback_data="admin_progress"
         )],
         [InlineKeyboardButton(
+            text="🔧 Управление пользователями",
+            callback_data="admin_management"
+        )],
+        [InlineKeyboardButton(
             text="📢 Рассылка",
             callback_data="admin_broadcast"
         )],
