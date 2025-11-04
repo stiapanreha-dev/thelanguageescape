@@ -4,7 +4,7 @@ SQLAlchemy ORM models
 """
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime,
+    Column, Integer, BigInteger, String, Boolean, DateTime,
     Float, Text, ForeignKey, JSON, Enum as SQLEnum
 )
 from sqlalchemy.ext.declarative import declarative_base
@@ -34,7 +34,7 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True, nullable=False, index=True)
+    telegram_id = Column(BigInteger, unique=True, nullable=False, index=True)
     username = Column(String(255), nullable=True)
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
