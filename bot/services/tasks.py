@@ -151,8 +151,13 @@ class TaskService:
         # If this is the FIRST correct completion of this task, count it
         previous_correct = task_result.scalars().all()
         if len(previous_correct) == 1:  # Just saved this one
+            # Get the task result to check if it was skipped
+            latest_result = previous_correct[0]
             progress.completed_tasks += 1
-            progress.correct_answers += 1
+
+            # Only count as correct answer if NOT skipped
+            if latest_result.user_answer != "SKIPPED":
+                progress.correct_answers += 1
 
         await session.commit()
 

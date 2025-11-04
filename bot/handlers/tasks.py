@@ -554,6 +554,24 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
 
     user_id = callback.from_user.id
 
+    # Get task type to save skip record
+    task = course_service.get_task(day_number, task_number)
+
+    if task:
+        # Save skip record to database (so this task is marked as completed)
+        task_type = TaskType.VOICE if task.get('type') == 'voice' else TaskType.CHOICE
+        await task_service.save_task_result(
+            session=session,
+            telegram_id=user_id,
+            day_number=day_number,
+            task_number=task_number,
+            task_type=task_type,
+            is_correct=True,  # Mark as correct to count as completed
+            user_answer="SKIPPED",  # Special marker for skipped tasks
+            correct_answer="SKIPPED"
+        )
+        logger.info(f"Task {day_number}.{task_number} skipped by user {user_id}")
+
     # Get total tasks
     all_tasks = course_service.get_day_tasks(day_number)
     total_tasks = len(all_tasks)
@@ -624,7 +642,7 @@ async def handle_voice_message(message: Message, session: AsyncSession):
     tasks = course_service.get_day_tasks(day_number)
     logger.info(f"Found {len(tasks)} tasks for day {day_number}")
 
-    # Get completed tasks for this day
+    # Get completed tasks for this day (including skipped ones)
     completed_result = await session.execute(
         select(TaskResult)
         .where(
@@ -636,13 +654,16 @@ async def handle_voice_message(message: Message, session: AsyncSession):
     completed_tasks = completed_result.scalars().all()
     completed_task_numbers = {t.task_number for t in completed_tasks}
 
-    # Find first incomplete voice task
+    logger.info(f"Completed task numbers for day {day_number}: {completed_task_numbers}")
+
+    # Find first incomplete voice task (skip SKIPPED tasks)
     voice_task = None
     voice_task_number = None
     for task in tasks:
-        if task.get('type') == 'voice' and task.get('task_number') not in completed_task_numbers:
+        task_num = task.get('task_number')
+        if task.get('type') == 'voice' and task_num not in completed_task_numbers:
             voice_task = task
-            voice_task_number = task.get('task_number')
+            voice_task_number = task_num
             logger.info(f"Found active voice task #{voice_task_number}")
             break
 
