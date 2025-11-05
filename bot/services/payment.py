@@ -82,6 +82,24 @@ class PaymentService:
                 },
                 "capture": True,  # Auto-capture payment
                 "description": description,
+                "receipt": {
+                    "customer": {
+                        "email": "noreply@the-language-escape.ru"  # Default email for receipt (54-ФЗ)
+                    },
+                    "items": [
+                        {
+                            "description": description,
+                            "quantity": "1.00",
+                            "amount": {
+                                "value": f"{amount:.2f}",
+                                "currency": COURSE_CURRENCY
+                            },
+                            "vat_code": 1,  # 1 = Без НДС
+                            "payment_mode": "full_payment",
+                            "payment_subject": "service"
+                        }
+                    ]
+                },
                 "metadata": {
                     "telegram_id": str(telegram_id),
                     "user_id": str(user_id),
