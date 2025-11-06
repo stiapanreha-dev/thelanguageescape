@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import THEME_MESSAGES, MAX_TASK_ATTEMPTS, MATERIALS_PATH
+from bot.config import THEME_MESSAGES, MAX_TASK_ATTEMPTS, MATERIALS_PATH, COURSE_DAYS
 from bot.database.models import User, Progress, TaskResult, TaskType
 from bot.services.course import course_service
 from bot.services.tasks import TaskService
