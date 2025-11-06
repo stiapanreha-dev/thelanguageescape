@@ -90,7 +90,10 @@ class CourseService:
         """Get outro message for a day (shown after completing all tasks)"""
         day_data = self.get_day_data(day_number)
         if day_data:
-            return day_data.get('outro_message')
+            outro = day_data.get('outro_message')
+            logger.info(f"Day {day_number} outro_message: {outro[:50] if outro else 'None'}")
+            return outro
+        logger.warning(f"Day {day_number} data not found")
         return None
 
     def get_day_tasks(self, day_number: int) -> List[Dict[str, Any]]:

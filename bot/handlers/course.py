@@ -513,10 +513,12 @@ async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
 
     # Add outro message if exists (story continuation)
     outro_message = course_service.get_day_outro_message(day_number)
+    logger.info(f"Outro message for day {day_number}: {outro_message[:50] if outro_message else 'None'}")
     if outro_message:
         # Replace [Имя] placeholder with actual name
         outro_text = outro_message.replace('[Имя]', user_name).replace('[имя]', user_name)
         completion_text += f"\n---\n\n{outro_text}\n\n---\n"
+        logger.info(f"Added outro to completion_text")
 
     if day_number < COURSE_DAYS:
         completion_text += f"\n✨ **День {day_number + 1} теперь доступен!**\nГотов продолжить?"
