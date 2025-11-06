@@ -595,11 +595,86 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
 
         await show_task(callback.message, session, user_id, day_number, task_number + 1)
     else:
-        # Last task - finish day
-        from bot.handlers.course import callback_finish_day
-        # Update callback data to finish_day
-        callback.data = f"finish_day_{day_number}"
-        await callback_finish_day(callback, session)
+        # Last task - finish day manually (can't use callback_finish_day due to frozen callback)
+        from bot.database.models import User, TaskResult
+        from bot.keyboards.inline import get_day_completion_keyboard
+
+        # Get user's name
+        user_name = "Субъект X"
+        user_result = await session.execute(
+            select(User).where(User.telegram_id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        if user:
+            name_result = await session.execute(
+                select(TaskResult).where(
+                    TaskResult.user_id == user.id,
+                    TaskResult.day_number == 1,
+                    TaskResult.task_number == 2,
+                    TaskResult.is_correct == True
+                ).order_by(TaskResult.completed_at.desc())
+            )
+            name_task = name_result.scalar_one_or_none()
+            if name_task and name_task.user_answer and name_task.user_answer != "SKIPPED":
+                user_name = name_task.user_answer
+
+        # Complete the day
+        success = await course_service.complete_day(session, user_id, day_number)
+
+        if not success:
+            await callback.answer("Error completing day", show_alert=True)
+            return
+
+        # Get the letter unlocked
+        letter = course_service.get_code_letter(day_number)
+
+        # Get updated progress
+        progress_data = await course_service.get_user_progress(session, user_id)
+
+        # Success message
+        completion_text = f"""
+🎉 **День {day_number} пройден!**
+
+Отличная работа, {user_name}!
+
+🔑 **Фрагмент кода разблокирован:** `{letter}`
+📊 **Прогресс:** `{progress_data['liberation_code']}`
+⏭️ **Уровень:** {day_number}/{COURSE_DAYS}
+
+"""
+
+        if day_number < COURSE_DAYS:
+            completion_text += f"\n✨ **День {day_number + 1} теперь доступен!**\nГотов продолжить?"
+        else:
+            # Final day
+            liberation_code = progress_data['liberation_code']
+            completion_text += f"\n🏆 **КОД ОСВОБОЖДЕНИЯ СОБРАН!**\n`{liberation_code}`\n\nТы сбежал из симуляции! 🎊\n\n⏳ Генерируем твой сертификат..."
+
+        keyboard = get_day_completion_keyboard(day_number, COURSE_DAYS)
+
+        # Delete old message and send new one
+        try:
+            await callback.message.delete()
+        except:
+            pass
+
+        await callback.message.answer(
+            completion_text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+        # Generate certificate for final day
+        if day_number == COURSE_DAYS:
+            from bot.handlers.course import generate_and_send_certificate
+            await generate_and_send_certificate(
+                callback.message,
+                session,
+                user_id,
+                user_name,
+                callback.bot
+            )
 
     await callback.answer("⏭️ Задание пропущено")
 
