@@ -86,6 +86,13 @@ class CourseService:
             return day_data.get('brief')
         return None
 
+    def get_day_outro_message(self, day_number: int) -> Optional[str]:
+        """Get outro message for a day (shown after completing all tasks)"""
+        day_data = self.get_day_data(day_number)
+        if day_data:
+            return day_data.get('outro_message')
+        return None
+
     def get_day_tasks(self, day_number: int) -> List[Dict[str, Any]]:
         """Get all tasks for a day"""
         day_data = self.get_day_data(day_number)
