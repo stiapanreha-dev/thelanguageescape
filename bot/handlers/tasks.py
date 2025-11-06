@@ -439,19 +439,40 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
                 await callback.answer("✅ Отлично!")
                 return
 
-        # Use custom success message from task if available, otherwise use template
-        custom_success = task.get('correct_message', '')
-        if custom_success:
-            # Replace placeholders in custom message
-            success_text = custom_success.replace('[Имя]', user_name).replace('Subject X', user_name)
+        # For last task, use outro_message if available
+        if task_number == total_tasks:
+            outro_message = course_service.get_day_outro_message(day_number)
+            if outro_message:
+                # Use outro message for last task
+                success_text = outro_message.replace('[Имя]', user_name).replace('[имя]', user_name)
+                logger.info(f"Using outro_message for day {day_number} last task")
+            else:
+                # Fallback to correct_message or template
+                custom_success = task.get('correct_message', '')
+                if custom_success:
+                    success_text = custom_success.replace('[Имя]', user_name).replace('Subject X', user_name)
+                else:
+                    success_text = THEME_MESSAGES['task_correct'].format(
+                        name=user_name,
+                        letter=letter if letter else "progress",
+                        day=day_number,
+                        total_days=10,
+                        code_fragment=letter
+                    )
         else:
-            success_text = THEME_MESSAGES['task_correct'].format(
-                name=user_name,
-                letter=letter if letter else "progress",
-                day=day_number,
-                total_days=10,
-                code_fragment=letter
-            )
+            # Not last task - use custom success message from task if available, otherwise use template
+            custom_success = task.get('correct_message', '')
+            if custom_success:
+                # Replace placeholders in custom message
+                success_text = custom_success.replace('[Имя]', user_name).replace('Subject X', user_name)
+            else:
+                success_text = THEME_MESSAGES['task_correct'].format(
+                    name=user_name,
+                    letter=letter if letter else "progress",
+                    day=day_number,
+                    total_days=10,
+                    code_fragment=letter
+                )
 
         # Check if message has text (can be edited) or media (need new message)
         if callback.message.text:
@@ -644,12 +665,7 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
 
 """
 
-        # Add outro message if exists (story continuation)
-        outro_message = course_service.get_day_outro_message(day_number)
-        if outro_message:
-            # Replace [Имя] placeholder with actual name
-            outro_text = outro_message.replace('[Имя]', user_name).replace('[имя]', user_name)
-            completion_text += f"\n---\n\n{outro_text}\n\n---\n"
+        # Note: outro_message is shown in last task result, not when skipping
 
         if day_number < COURSE_DAYS:
             completion_text += f"\n✨ **День {day_number + 1} теперь доступен!**\nГотов продолжить?"
