@@ -28,6 +28,9 @@ router = Router(name="tasks")
 # Task service instance (will be initialized in main.py)
 task_service: TaskService = None
 
+# Track users currently processing voice messages (protection from race condition)
+_processing_voice_users = set()
+
 
 class TaskStates(StatesGroup):
     """States for task processing"""
@@ -584,7 +587,12 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
 
     # Move to next task or finish
     if task_number < total_tasks:
-        await callback.message.delete()
+        # Try to delete message, but continue even if it fails
+        try:
+            await callback.message.delete()
+        except Exception as e:
+            logger.warning(f"Failed to delete message in skip_task: {e}")
+
         await show_task(callback.message, session, user_id, day_number, task_number + 1)
     else:
         # Last task - finish day
@@ -612,240 +620,253 @@ async def handle_voice_message(message: Message, session: AsyncSession):
 
     logger.info(f"🎤 Voice message received from user {user_id}, duration: {voice.duration}s")
 
-    # Get user's current day and find active voice task
-    result = await session.execute(
-        select(User).where(User.telegram_id == user_id)
-    )
-    user = result.scalar_one_or_none()
-
-    if not user or not user.has_access:
-        logger.warning(f"User {user_id} has no access to course")
-        await message.answer("❌ У вас нет доступа к курсу")
+    # Protection from race condition: check if user is already processing a voice message
+    if user_id in _processing_voice_users:
+        logger.warning(f"User {user_id} is already processing a voice message, ignoring new one")
+        await message.answer("⏳ Подожди, я ещё обрабатываю предыдущее голосовое сообщение...")
         return
 
-    # Determine the day user is ACTUALLY working on by checking latest task result
-    # This handles the case where user is repeating an old day
-    from bot.database.models import TaskResult
-    from sqlalchemy import desc
+    # Mark user as processing
+    _processing_voice_users.add(user_id)
 
-    latest_result = await session.execute(
-        select(TaskResult)
-        .where(TaskResult.user_id == user.id)
-        .order_by(desc(TaskResult.created_at))
-        .limit(1)
-    )
-    latest = latest_result.scalar_one_or_none()
-
-    if latest:
-        day_number = latest.day_number
-        logger.info(f"User {user_id} is working on day {day_number} (from latest task result)")
-    else:
-        day_number = user.current_day
-        logger.info(f"User {user_id} current day: {day_number} (no task results yet)")
-
-    # Find CURRENT voice task for this day
-    # Check which task user is on by looking at completed tasks
-    tasks = course_service.get_day_tasks(day_number)
-    logger.info(f"Found {len(tasks)} tasks for day {day_number}")
-
-    # Get completed tasks for this day (including skipped ones)
-    completed_result = await session.execute(
-        select(TaskResult)
-        .where(
-            TaskResult.user_id == user.id,
-            TaskResult.day_number == day_number,
-            TaskResult.is_correct == True
-        )
-    )
-    completed_tasks = completed_result.scalars().all()
-    completed_task_numbers = {t.task_number for t in completed_tasks}
-
-    logger.info(f"Completed task numbers for day {day_number}: {completed_task_numbers}")
-
-    # Find first incomplete voice task (skip SKIPPED tasks)
-    voice_task = None
-    voice_task_number = None
-    for task in tasks:
-        task_num = task.get('task_number')
-        if task.get('type') == 'voice' and task_num not in completed_task_numbers:
-            voice_task = task
-            voice_task_number = task_num
-            logger.info(f"Found active voice task #{voice_task_number}")
-            break
-
-    if not voice_task:
-        logger.warning(f"No active voice task found for day {day_number}")
-        await message.answer("🎤 Голосовое сообщение получено, но нет активного голосового задания")
-        return
-
-    # Get task configuration
-    voice_keywords = voice_task.get('voice_keywords', [])
-    extract_pattern = voice_task.get('voice_extract_pattern')  # name, country, profession, or None
-    hints = voice_task.get('hints', [])
-
-    # Initialize variables that will be used after try block
-    extracted_data = None
-    recognized_text = None
-    is_correct = False
-
-    # Download voice message
     try:
-        # Show processing message
-        processing_msg = await message.answer("🎧 Обрабатываю голосовое сообщение...")
+        # Get user's current day and find active voice task
+        result = await session.execute(
+            select(User).where(User.telegram_id == user_id)
+        )
+        user = result.scalar_one_or_none()
 
-        # Download file
-        file = await message.bot.get_file(voice.file_id)
+        if not user or not user.has_access:
+            logger.warning(f"User {user_id} has no access to course")
+            await message.answer("❌ У вас нет доступа к курсу")
+            return
 
-        # Create temp file for voice
-        with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as temp_file:
-            temp_path = temp_file.name
-            await message.bot.download_file(file.file_path, temp_path)
+        # Determine the day user is ACTUALLY working on by checking latest task result
+        # This handles the case where user is repeating an old day
+        from bot.database.models import TaskResult
+        from sqlalchemy import desc
 
-        # Transcribe audio
-        recognized_text = await speech_service.transcribe_audio(temp_path)
+        latest_result = await session.execute(
+            select(TaskResult)
+            .where(TaskResult.user_id == user.id)
+            .order_by(desc(TaskResult.created_at))
+            .limit(1)
+        )
+        latest = latest_result.scalar_one_or_none()
 
-        # Cleanup temp file
+        if latest:
+            day_number = latest.day_number
+            logger.info(f"User {user_id} is working on day {day_number} (from latest task result)")
+        else:
+            day_number = user.current_day
+            logger.info(f"User {user_id} current day: {day_number} (no task results yet)")
+
+        # Find CURRENT voice task for this day
+        # Check which task user is on by looking at completed tasks
+        tasks = course_service.get_day_tasks(day_number)
+        logger.info(f"Found {len(tasks)} tasks for day {day_number}")
+
+        # Get completed tasks for this day (including skipped ones)
+        completed_result = await session.execute(
+            select(TaskResult)
+            .where(
+                TaskResult.user_id == user.id,
+                TaskResult.day_number == day_number,
+                TaskResult.is_correct == True
+            )
+        )
+        completed_tasks = completed_result.scalars().all()
+        completed_task_numbers = {t.task_number for t in completed_tasks}
+
+        logger.info(f"Completed task numbers for day {day_number}: {completed_task_numbers}")
+
+        # Find first incomplete voice task (skip SKIPPED tasks)
+        voice_task = None
+        voice_task_number = None
+        for task in tasks:
+            task_num = task.get('task_number')
+            if task.get('type') == 'voice' and task_num not in completed_task_numbers:
+                voice_task = task
+                voice_task_number = task_num
+                logger.info(f"Found active voice task #{voice_task_number}")
+                break
+
+        if not voice_task:
+            logger.warning(f"No active voice task found for day {day_number}")
+            await message.answer("🎤 Голосовое сообщение получено, но нет активного голосового задания")
+            return
+
+        # Get task configuration
+        voice_keywords = voice_task.get('voice_keywords', [])
+        extract_pattern = voice_task.get('voice_extract_pattern')  # name, country, profession, or None
+        hints = voice_task.get('hints', [])
+
+        # Initialize variables that will be used after try block
+        extracted_data = None
+        recognized_text = None
+        is_correct = False
+
+        # Download voice message
         try:
-            os.remove(temp_path)
-        except:
-            pass
+            # Show processing message
+            processing_msg = await message.answer("🎧 Обрабатываю голосовое сообщение...")
 
-        # Delete processing message
-        await processing_msg.delete()
+            # Download file
+            file = await message.bot.get_file(voice.file_id)
 
-        # Check if recognition was successful
-        if not recognized_text:
-            await message.answer(
-                "❌ **Не удалось распознать речь**\n\n"
-                "Попробуй еще раз:\n"
-                "1. Говори четко и медленно\n"
-                "2. Убедись, что произносишь фразу полностью\n"
-                "3. Уменьши фоновый шум",
-                parse_mode="Markdown"
-            )
-            logger.warning(f"Voice recognition failed for user {user_id}")
-            return
+            # Create temp file for voice
+            with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as temp_file:
+                temp_path = temp_file.name
+                await message.bot.download_file(file.file_path, temp_path)
 
-        # Check if required keywords found
-        text_lower = recognized_text.lower()
-        has_keyword = any(keyword in text_lower for keyword in voice_keywords) if voice_keywords else True
+            # Transcribe audio
+            recognized_text = await speech_service.transcribe_audio(temp_path)
 
-        if not has_keyword:
-            hint_text = hints[0] if hints else "Try again!"
-            await message.answer(
-                f"❌ **Требуемая фраза не обнаружена**\n\n"
-                f"Я услышал: _{recognized_text}_\n\n"
-                f"{hint_text}",
-                parse_mode="Markdown"
-            )
-            logger.info(f"Keywords not found. Recognized: {recognized_text}")
-            return
+            # Cleanup temp file
+            try:
+                os.remove(temp_path)
+            except:
+                pass
 
-        # Extract data based on pattern (if pattern is specified)
-        extracted_value = None
-        if extract_pattern:
-            if extract_pattern == 'name':
-                extracted_value = speech_service.extract_name_from_text(recognized_text)
-            elif extract_pattern == 'country':
-                extracted_value = speech_service.extract_country_from_text(recognized_text)
-            elif extract_pattern == 'profession':
-                extracted_value = speech_service.extract_profession_from_text(recognized_text)
+            # Delete processing message
+            await processing_msg.delete()
 
-            # Check if extraction was successful
-            if not extracted_value:
-                hint_text = hints[1] if len(hints) > 1 else "Try again!"
+            # Check if recognition was successful
+            if not recognized_text:
                 await message.answer(
-                    f"❌ **Не удалось извлечь данные**\n\n"
+                    "❌ **Не удалось распознать речь**\n\n"
+                    "Попробуй еще раз:\n"
+                    "1. Говори четко и медленно\n"
+                    "2. Убедись, что произносишь фразу полностью\n"
+                    "3. Уменьши фоновый шум",
+                    parse_mode="Markdown"
+                )
+                logger.warning(f"Voice recognition failed for user {user_id}")
+                return
+
+            # Check if required keywords found
+            text_lower = recognized_text.lower()
+            has_keyword = any(keyword in text_lower for keyword in voice_keywords) if voice_keywords else True
+
+            if not has_keyword:
+                hint_text = hints[0] if hints else "Try again!"
+                await message.answer(
+                    f"❌ **Требуемая фраза не обнаружена**\n\n"
                     f"Я услышал: _{recognized_text}_\n\n"
                     f"{hint_text}",
                     parse_mode="Markdown"
                 )
-                logger.info(f"{extract_pattern} not extracted. Recognized: {recognized_text}")
+                logger.info(f"Keywords not found. Recognized: {recognized_text}")
                 return
 
-            # Success! Save to user profile
-            if extract_pattern == 'name':
-                user.first_name = extracted_value
-            elif extract_pattern == 'country':
-                user.country = extracted_value
-            elif extract_pattern == 'profession':
-                user.profession = extracted_value
+            # Extract data based on pattern (if pattern is specified)
+            extracted_value = None
+            if extract_pattern:
+                if extract_pattern == 'name':
+                    extracted_value = speech_service.extract_name_from_text(recognized_text)
+                elif extract_pattern == 'country':
+                    extracted_value = speech_service.extract_country_from_text(recognized_text)
+                elif extract_pattern == 'profession':
+                    extracted_value = speech_service.extract_profession_from_text(recognized_text)
 
-            await session.commit()
+                # Check if extraction was successful
+                if not extracted_value:
+                    hint_text = hints[1] if len(hints) > 1 else "Try again!"
+                    await message.answer(
+                        f"❌ **Не удалось извлечь данные**\n\n"
+                        f"Я услышал: _{recognized_text}_\n\n"
+                        f"{hint_text}",
+                        parse_mode="Markdown"
+                    )
+                    logger.info(f"{extract_pattern} not extracted. Recognized: {recognized_text}")
+                    return
 
-            logger.info(f"Successfully extracted {extract_pattern} '{extracted_value}' from voice (user {user_id})")
+                # Success! Save to user profile
+                if extract_pattern == 'name':
+                    user.first_name = extracted_value
+                elif extract_pattern == 'country':
+                    user.country = extracted_value
+                elif extract_pattern == 'profession':
+                    user.profession = extracted_value
 
-        # Mark task as correct
-        is_correct = True
-        extracted_data = extracted_value if extracted_value else recognized_text
+                await session.commit()
 
-    except Exception as e:
-        logger.error(f"Error processing voice message: {e}")
-        await message.answer(
-            "❌ **Ошибка обработки голосового сообщения**\n\n"
-            "Попробуй отправить еще раз",
-            parse_mode="Markdown"
+                logger.info(f"Successfully extracted {extract_pattern} '{extracted_value}' from voice (user {user_id})")
+
+            # Mark task as correct
+            is_correct = True
+            extracted_data = extracted_value if extracted_value else recognized_text
+
+        except Exception as e:
+            logger.error(f"Error processing voice message: {e}")
+            await message.answer(
+                "❌ **Ошибка обработки голосового сообщения**\n\n"
+                "Попробуй отправить еще раз",
+                parse_mode="Markdown"
+            )
+            return
+
+        # Save result with extracted data as user_answer
+        await task_service.save_task_result(
+            session=session,
+            telegram_id=user_id,
+            day_number=day_number,
+            task_number=voice_task_number,
+            task_type=TaskType.VOICE,
+            is_correct=is_correct,
+            user_answer=extracted_data if extracted_data else None,
+            voice_file_id=voice.file_id,
+            voice_duration=voice.duration,
+            recognized_text=recognized_text
         )
-        return
 
-    # Save result with extracted data as user_answer
-    await task_service.save_task_result(
-        session=session,
-        telegram_id=user_id,
-        day_number=day_number,
-        task_number=voice_task_number,
-        task_type=TaskType.VOICE,
-        is_correct=is_correct,
-        user_answer=extracted_data if extracted_data else None,
-        voice_file_id=voice.file_id,
-        voice_duration=voice.duration,
-        recognized_text=recognized_text
-    )
+        # Get user's name for personalization from Day 1 voice task
+        user_display_name = "Субъект X"
+        if extract_pattern == 'name':
+            # If this is the name task, use extracted name
+            user_display_name = extracted_data
+        else:
+            # Otherwise get name from Day 1 Task 2 results
+            name_result = await session.execute(
+                select(TaskResult).where(
+                    TaskResult.user_id == user.id,
+                    TaskResult.day_number == 1,
+                    TaskResult.task_number == 2,
+                    TaskResult.is_correct == True
+                ).order_by(TaskResult.completed_at.desc())
+            )
+            name_task = name_result.scalar_one_or_none()
+            if name_task and name_task.user_answer:
+                user_display_name = name_task.user_answer
 
-    # Get user's name for personalization from Day 1 voice task
-    user_display_name = "Субъект X"
-    if extract_pattern == 'name':
-        # If this is the name task, use extracted name
-        user_display_name = extracted_data
-    else:
-        # Otherwise get name from Day 1 Task 2 results
-        name_result = await session.execute(
-            select(TaskResult).where(
-                TaskResult.user_id == user.id,
-                TaskResult.day_number == 1,
-                TaskResult.task_number == 2,
-                TaskResult.is_correct == True
-            ).order_by(TaskResult.completed_at.desc())
-        )
-        name_task = name_result.scalar_one_or_none()
-        if name_task and name_task.user_answer:
-            user_display_name = name_task.user_answer
+        # Success message
+        total_tasks = len(tasks)
+        letter = course_service.get_code_letter(day_number) if voice_task_number == total_tasks else ""
 
-    # Success message
-    total_tasks = len(tasks)
-    letter = course_service.get_code_letter(day_number) if voice_task_number == total_tasks else ""
+        # Use custom success message if available
+        custom_success = voice_task.get('correct_message', '')
+        if custom_success:
+            # Replace [Имя] placeholder with user's actual name
+            success_text = custom_success.replace('[Имя]', user_display_name)
+        else:
+            success_text = f"✅ **Отлично, {user_display_name}!**\n\nТы успешно прошёл голосовое задание."
+            if letter:
+                success_text += f"\n\n🔑 **Фрагмент кода:** `{letter}`"
 
-    # Use custom success message if available
-    custom_success = voice_task.get('correct_message', '')
-    if custom_success:
-        # Replace [Имя] placeholder with user's actual name
-        success_text = custom_success.replace('[Имя]', user_display_name)
-    else:
-        success_text = f"✅ **Отлично, {user_display_name}!**\n\nТы успешно прошёл голосовое задание."
-        if letter:
-            success_text += f"\n\n🔑 **Фрагмент кода:** `{letter}`"
+        # Auto-transition to next task
+        next_task_number = voice_task_number + 1
+        if voice_task_number < total_tasks:
+            # Not last task - transition directly without success message
+            await show_task(message, session, user_id, day_number, next_task_number)
+        else:
+            # Last task - show completion with code letter
+            keyboard = get_task_result_keyboard(day_number, voice_task_number, total_tasks, True)
+            await message.answer(success_text, parse_mode="Markdown", reply_markup=keyboard)
 
-    # Auto-transition to next task
-    next_task_number = voice_task_number + 1
-    if voice_task_number < total_tasks:
-        # Not last task - transition directly without success message
-        await show_task(message, session, user_id, day_number, next_task_number)
-    else:
-        # Last task - show completion with code letter
-        keyboard = get_task_result_keyboard(day_number, voice_task_number, total_tasks, True)
-        await message.answer(success_text, parse_mode="Markdown", reply_markup=keyboard)
-
-    logger.info(f"Voice task completed by user {user_id}: {extract_pattern}='{extracted_data}'")
+        logger.info(f"Voice task completed by user {user_id}: {extract_pattern}='{extracted_data}'")
+    finally:
+        # Always remove user from processing set
+        _processing_voice_users.discard(user_id)
 
 
 @router.callback_query(F.data.startswith("voice_instructions_"))
