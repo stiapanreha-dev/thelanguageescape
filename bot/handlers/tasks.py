@@ -560,6 +560,12 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
     if task:
         # Save skip record to database (so this task is marked as completed)
         task_type = TaskType.VOICE if task.get('type') == 'voice' else TaskType.CHOICE
+
+        # For voice tasks with name extraction, use "Subject X" instead of "SKIPPED"
+        user_answer = "SKIPPED"
+        if task.get('type') == 'voice' and task.get('voice_extract_pattern') == 'name':
+            user_answer = "Subject X"
+
         await task_service.save_task_result(
             session=session,
             telegram_id=user_id,
@@ -567,7 +573,7 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
             task_number=task_number,
             task_type=task_type,
             is_correct=True,  # Mark as correct to count as completed
-            user_answer="SKIPPED",  # Special marker for skipped tasks
+            user_answer=user_answer,
             correct_answer="SKIPPED"
         )
         logger.info(f"Task {day_number}.{task_number} skipped by user {user_id}")
