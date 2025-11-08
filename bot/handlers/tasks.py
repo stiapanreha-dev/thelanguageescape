@@ -241,8 +241,20 @@ async def show_task(
             full_path = MATERIALS_PATH / media
 
             if full_path.exists():
-                # Determine media type by extension
-                if media.lower().endswith(('.mp4', '.mov', '.avi')):
+                # Get media_type from task (if specified)
+                media_type = task.get('media_type', '')
+
+                # Determine media type by media_type field or extension
+                if media_type == 'audio' or media.lower().endswith(('.mp3', '.m4a', '.ogg', '.wav')):
+                    # Send as voice message to prevent Telegram auto-play
+                    audio_file = FSInputFile(full_path)
+                    await message.answer_voice(
+                        voice=audio_file,
+                        caption=task_text,
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                elif media.lower().endswith(('.mp4', '.mov', '.avi')):
                     # Send as animation (GIF) - plays once without controls
                     video = FSInputFile(full_path)
                     await message.answer_animation(
