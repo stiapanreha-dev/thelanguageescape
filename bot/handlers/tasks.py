@@ -583,9 +583,12 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession, s
                 current_task = course_service.get_task(day_number, task_number)
                 current_block = current_task.get('block') if current_task else None
 
-                # Save current message ID to block before potentially deleting
-                if current_block is not None:
-                    await save_block_message_id(state, callback.message.message_id, current_block)
+                # If no block specified, use unique task ID (each task = separate block)
+                if current_block is None:
+                    current_block = f"task_{day_number}_{task_number}"
+
+                # Save current message ID to block
+                await save_block_message_id(state, callback.message.message_id, current_block)
 
                 # Check if should delete previous block messages
                 if should_delete_previous_task(day_number, task_number, next_task_number):
@@ -707,9 +710,12 @@ async def callback_next_task(callback: CallbackQuery, session: AsyncSession, sta
     prev_task = course_service.get_task(day_number, prev_task_number)
     prev_block = prev_task.get('block') if prev_task else None
 
+    # If no block specified, use unique task ID (each task = separate block)
+    if prev_block is None:
+        prev_block = f"task_{day_number}_{prev_task_number}"
+
     # Save current message ID to block before potentially deleting
-    if prev_block is not None:
-        await save_block_message_id(state, callback.message.message_id, prev_block)
+    await save_block_message_id(state, callback.message.message_id, prev_block)
 
     # Check if should delete previous block messages
     if should_delete_previous_task(day_number, prev_task_number, next_task_number):
@@ -780,9 +786,12 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession, sta
         current_task = course_service.get_task(day_number, task_number)
         current_block = current_task.get('block') if current_task else None
 
+        # If no block specified, use unique task ID (each task = separate block)
+        if current_block is None:
+            current_block = f"task_{day_number}_{task_number}"
+
         # Save current message ID to block before potentially deleting
-        if current_block is not None:
-            await save_block_message_id(state, callback.message.message_id, current_block)
+        await save_block_message_id(state, callback.message.message_id, current_block)
 
         # Check if should delete previous block messages
         next_task_number = task_number + 1
