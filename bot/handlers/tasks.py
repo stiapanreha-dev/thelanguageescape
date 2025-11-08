@@ -539,73 +539,30 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession, s
         # Correct answer
         letter = course_service.get_code_letter(day_number) if task_number == total_tasks else ""
 
-        # Check if this is a retry attempt - if so, don't auto-transition
-        data = await state.get_data()
-        is_retry_mode = data.get('is_retry_mode', False)
-
-        if is_retry_mode:
-            # Clear retry flag
-            await state.update_data(is_retry_mode=False)
-            logger.info(f"Retry mode detected - disabling auto-transition for task {day_number}.{task_number}")
-
-        # Check if should auto-transition to next task
+        # ALWAYS auto-transition to next task (no success message between tasks)
         next_task_number = task_number + 1
-        if task_number < total_tasks and not is_retry_mode:
-            next_task = course_service.get_task(day_number, next_task_number)
-            logger.info(f"Checking next task: day={day_number}, task={next_task_number}, type={next_task.get('type') if next_task else None}")
+        if task_number < total_tasks:
+            # Not last task - auto-transition without showing success message
+            logger.info(f"Auto-transitioning to task {next_task_number} for user {user_id}")
 
-            # Auto-transition rules:
-            # 1. If next task is voice/audio/text_input - always auto-transition
-            #    (these types handle their own auto-transition internally)
-            # 2. For Day 2: auto-transition from task 1 to task 2, and task 2 to task 3
-            # 3. For Day 3: auto-transition from task 1, 2, 3 (show success only after task 4)
-            # 4. For Day 4: auto-transition from task 1-6 (show success only after task 7)
-            # 5. For Day 5: auto-transition from task 1-8 (show success only after task 9)
-            # 6. For Day 6: auto-transition from task 1-3 (show success only after task 4)
-            # 7. For Day 7: auto-transition from task 1-3 (show success only after task 4)
-            # 8. For Day 8: auto-transition from task 1-3 (show success only after task 4)
-            should_auto_transition = False
-            if next_task and next_task.get('type') in ['voice', 'audio', 'text_input']:
-                should_auto_transition = True
-            elif day_number == 2 and task_number in [1, 2]:
-                should_auto_transition = True
-            elif day_number == 3 and task_number in [1, 2, 3]:
-                should_auto_transition = True
-            elif day_number == 4 and task_number in [1, 2, 3, 4, 5, 6]:
-                should_auto_transition = True
-            elif day_number == 5 and task_number in [1, 2, 3, 4, 5, 6, 7, 8]:
-                should_auto_transition = True
-            elif day_number == 6 and task_number in [1, 2, 3]:
-                should_auto_transition = True
-            elif day_number == 7 and task_number in [1, 2, 3]:
-                should_auto_transition = True
-            elif day_number == 8 and task_number in [1, 2, 3]:
-                should_auto_transition = True
-            elif day_number == 9 and task_number in [1, 2]:
-                should_auto_transition = True
+            # Get current task block info
+            current_task = course_service.get_task(day_number, task_number)
+            current_block = current_task.get('block') if current_task else None
 
-            if should_auto_transition:
-                # Auto-transition to next task
-                logger.info(f"Auto-transitioning to task {next_task_number} for user {user_id}")
+            # If no block specified, use unique task ID (each task = separate block)
+            if current_block is None:
+                current_block = f"task_{day_number}_{task_number}"
 
-                # Get current task block info
-                current_task = course_service.get_task(day_number, task_number)
-                current_block = current_task.get('block') if current_task else None
+            # Save current message ID to block
+            await save_block_message_id(state, callback.message.message_id, current_block)
 
-                # If no block specified, use unique task ID (each task = separate block)
-                if current_block is None:
-                    current_block = f"task_{day_number}_{task_number}"
+            # Check if should delete previous block messages
+            if should_delete_previous_task(day_number, task_number, next_task_number):
+                await delete_block_messages(callback, state)
 
-                # Save current message ID to block
-                await save_block_message_id(state, callback.message.message_id, current_block)
-
-                # Check if should delete previous block messages
-                if should_delete_previous_task(day_number, task_number, next_task_number):
-                    await delete_block_messages(callback, state)
-
-                await show_task(callback.message, session, user_id, day_number, next_task_number, state)
-                await callback.answer("✅ Отлично!")
-                return
+            await show_task(callback.message, session, user_id, day_number, next_task_number, state)
+            await callback.answer("✅")
+            return
 
         # For last task, use outro_message if available
         if task_number == total_tasks:
