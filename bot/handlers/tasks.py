@@ -313,8 +313,9 @@ async def show_task(
 
             if full_path.exists():
                 audio = FSInputFile(full_path)
-                await message.answer_audio(
-                    audio=audio,
+                # Send as voice message to prevent Telegram auto-play
+                await message.answer_voice(
+                    voice=audio,
                     caption=task_text,
                     parse_mode="Markdown",
                     reply_markup=keyboard
