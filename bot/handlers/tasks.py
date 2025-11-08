@@ -539,9 +539,18 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession, s
         # Correct answer
         letter = course_service.get_code_letter(day_number) if task_number == total_tasks else ""
 
+        # Check if this is a retry attempt - if so, don't auto-transition
+        data = await state.get_data()
+        is_retry_mode = data.get('is_retry_mode', False)
+
+        if is_retry_mode:
+            # Clear retry flag
+            await state.update_data(is_retry_mode=False)
+            logger.info(f"Retry mode detected - disabling auto-transition for task {day_number}.{task_number}")
+
         # Check if should auto-transition to next task
         next_task_number = task_number + 1
-        if task_number < total_tasks:
+        if task_number < total_tasks and not is_retry_mode:
             next_task = course_service.get_task(day_number, next_task_number)
             logger.info(f"Checking next task: day={day_number}, task={next_task_number}, type={next_task.get('type') if next_task else None}")
 
@@ -735,6 +744,9 @@ async def callback_retry_task(callback: CallbackQuery, session: AsyncSession, st
     task_number = int(parts[3])
 
     user_id = callback.from_user.id
+
+    # Set retry flag to prevent auto-transition after correct answer
+    await state.update_data(is_retry_mode=True)
 
     await callback.message.delete()
     await show_task(callback.message, session, user_id, day_number, task_number, state)
