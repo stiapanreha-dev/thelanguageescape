@@ -530,7 +530,8 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession, s
             logger.info(f"Checking next task: day={day_number}, task={next_task_number}, type={next_task.get('type') if next_task else None}")
 
             # Auto-transition rules:
-            # 1. If next task is voice/audio - always auto-transition
+            # 1. If next task is voice/audio/text_input - always auto-transition
+            #    (these types handle their own auto-transition internally)
             # 2. For Day 2: auto-transition from task 1 to task 2, and task 2 to task 3
             # 3. For Day 3: auto-transition from task 1, 2, 3 (show success only after task 4)
             # 4. For Day 4: auto-transition from task 1-6 (show success only after task 7)
@@ -539,7 +540,7 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession, s
             # 7. For Day 7: auto-transition from task 1-3 (show success only after task 4)
             # 8. For Day 8: auto-transition from task 1-3 (show success only after task 4)
             should_auto_transition = False
-            if next_task and next_task.get('type') in ['voice', 'audio']:
+            if next_task and next_task.get('type') in ['voice', 'audio', 'text_input']:
                 should_auto_transition = True
             elif day_number == 2 and task_number in [1, 2]:
                 should_auto_transition = True
