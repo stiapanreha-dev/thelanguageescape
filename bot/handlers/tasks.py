@@ -759,9 +759,10 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession, sta
         # Save skip record to database (so this task is marked as completed)
         task_type = TaskType.VOICE if task.get('type') == 'voice' else TaskType.CHOICE
 
-        # For voice tasks with name extraction, use "Subject X" instead of "SKIPPED"
+        # For voice or text_input tasks with name extraction, use "Subject X" instead of "SKIPPED"
         user_answer = "SKIPPED"
-        if task.get('type') == 'voice' and task.get('voice_extract_pattern') == 'name':
+        if (task.get('type') == 'voice' and task.get('voice_extract_pattern') == 'name') or \
+           (task.get('type') == 'text_input' and task.get('validation_pattern') == 'name'):
             user_answer = "Subject X"
 
         await task_service.save_task_result(
