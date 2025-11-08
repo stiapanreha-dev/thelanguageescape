@@ -36,6 +36,7 @@ class TaskStates(StatesGroup):
     """States for task processing"""
     waiting_for_voice = State()
     waiting_for_dialog = State()
+    waiting_for_text_input = State()
 
 
 def init_task_service():
@@ -374,6 +375,43 @@ async def show_task(
         options = [opt.replace('[Имя]', user_name) for opt in options]
 
         keyboard = get_task_keyboard(day_number, task_number, options)
+
+        await message.answer(
+            task_text,
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+    elif task_type == 'text_input':
+        # Text input task
+        instruction = task.get('instruction', '')
+        placeholder = task.get('placeholder', '')
+
+        # Build task text
+        task_text = f"**{question}**"
+        if instruction:
+            task_text += f"\n\n{instruction}"
+        if placeholder:
+            task_text += f"\n\n_Пример: {placeholder}_"
+
+        # Set state to wait for text input
+        await state.set_state(TaskStates.waiting_for_text_input)
+        await state.update_data(
+            current_day=day_number,
+            current_task=task_number,
+            validation_pattern=task.get('validation_pattern'),
+            correct_message=task.get('correct_message', '✅ Принято!'),
+            incorrect_message=task.get('incorrect_message', '❌ Некорректный ввод. Попробуйте снова.'),
+            hints=task.get('hints', []),
+            hint_count=0
+        )
+
+        # Create skip button
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💡 Подсказка", callback_data=f"hint_{day_number}_{task_number}")],
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data=f"skip_task_{day_number}_{task_number}")]
+        ])
 
         await message.answer(
             task_text,
@@ -820,6 +858,103 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession, sta
             )
 
     await callback.answer("⏭️ Задание пропущено")
+
+
+@router.message(F.text, TaskStates.waiting_for_text_input)
+async def handle_text_input(message: Message, session: AsyncSession, state: FSMContext):
+    """
+    Handle text input for text_input tasks
+    """
+    user_id = message.from_user.id
+    data = await state.get_data()
+
+    day_number = data.get('current_day')
+    task_number = data.get('current_task')
+    validation_pattern = data.get('validation_pattern')
+    correct_message = data.get('correct_message', '✅ Принято!')
+    incorrect_message = data.get('incorrect_message', '❌ Некорректный ввод.')
+
+    if not day_number or not task_number:
+        logger.warning(f"Missing day/task data for text input from user {user_id}")
+        return
+
+    user_input = message.text.strip()
+
+    # Validate input
+    is_valid = validate_text_input(user_input, validation_pattern)
+
+    if not is_valid:
+        await message.answer(incorrect_message)
+        return
+
+    # Input is valid - save result
+    from bot.database.models import TaskType
+    task = course_service.get_task(day_number, task_number)
+    task_type = TaskType.CHOICE  # Use CHOICE for text_input
+
+    await task_service.save_task_result(
+        session=session,
+        telegram_id=user_id,
+        day_number=day_number,
+        task_number=task_number,
+        task_type=task_type,
+        is_correct=True,
+        user_answer=user_input,
+        correct_answer=user_input
+    )
+
+    logger.info(f"Text input saved: user={user_id}, day={day_number}, task={task_number}, input={user_input}")
+
+    # Clear state
+    await state.clear()
+
+    # Send success message with user input
+    success_msg = correct_message.replace('{user_input}', user_input)
+    await message.answer(success_msg)
+
+    # Check if should auto-transition to next task
+    all_tasks = course_service.get_day_tasks(day_number)
+    total_tasks = len(all_tasks)
+    next_task_number = task_number + 1
+
+    if task_number < total_tasks:
+        # Auto-transition to next task
+        logger.info(f"Auto-transitioning to task {next_task_number} after text input")
+        await show_task(message, session, user_id, day_number, next_task_number, state)
+    else:
+        # Last task - show completion
+        await message.answer("🎉 День завершён! Нажмите кнопку ниже для продолжения.")
+
+
+def validate_text_input(text: str, pattern: str) -> bool:
+    """
+    Validate text input based on pattern
+
+    Args:
+        text: User input text
+        pattern: Validation pattern (name, email, number, any, None)
+
+    Returns:
+        True if valid, False otherwise
+    """
+    import re
+
+    if not pattern or pattern == 'any':
+        return len(text) > 0  # Just check non-empty
+
+    if pattern == 'name':
+        # Only letters (any language) and spaces, 2-50 characters
+        return bool(re.match(r'^[a-zA-Zа-яА-ЯёЁ\s]{2,50}$', text))
+
+    if pattern == 'email':
+        # Basic email validation
+        return bool(re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', text))
+
+    if pattern == 'number':
+        # Only digits
+        return text.isdigit()
+
+    return True  # Unknown pattern - allow all
 
 
 @router.message(F.voice)
