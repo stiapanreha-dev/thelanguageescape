@@ -133,6 +133,50 @@
 
 ### Файл: `bot/handlers/tasks.py`
 
+#### Функции для работы с блоками
+
+**1. Сохранение message_id в блок:**
+```python
+async def save_block_message_id(state: FSMContext, message_id: int, block_id: int):
+    """Save message_id to the current block's message list."""
+    data = await state.get_data()
+    current_block_messages = data.get('current_block_messages', [])
+    current_block_id = data.get('current_block_id')
+
+    # If block changed, reset the list
+    if current_block_id != block_id:
+        current_block_messages = []
+
+    # Add new message_id
+    current_block_messages.append(message_id)
+
+    # Save to state
+    await state.update_data(
+        current_block_messages=current_block_messages,
+        current_block_id=block_id
+    )
+```
+
+**2. Удаление всех сообщений блока:**
+```python
+async def delete_block_messages(callback: CallbackQuery, state: FSMContext):
+    """Delete all messages from the current block."""
+    data = await state.get_data()
+    message_ids = data.get('current_block_messages', [])
+
+    for msg_id in message_ids:
+        try:
+            await callback.bot.delete_message(
+                chat_id=callback.message.chat.id,
+                message_id=msg_id
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete message {msg_id}: {e}")
+
+    # Clear the list
+    await state.update_data(current_block_messages=[], current_block_id=None)
+```
+
 #### Функция проверки блока
 ```python
 def should_delete_previous_task(day_number: int, prev_task_number: int, current_task_number: int) -> bool:
@@ -162,17 +206,19 @@ def should_delete_previous_task(day_number: int, prev_task_number: int, current_
 #### Применение в коде
 ```python
 # Auto-transition (правильный ответ)
-if should_delete_previous_task(day_number, task_number, next_task_number):
-    await callback.message.delete()
+current_task = course_service.get_task(day_number, task_number)
+current_block = current_task.get('block') if current_task else None
 
-# Next task (кнопка "Далее")
-if should_delete_previous_task(day_number, prev_task_number, next_task_number):
-    await callback.message.delete()
+# Save current message ID to block before potentially deleting
+if current_block is not None:
+    await save_block_message_id(state, callback.message.message_id, current_block)
 
-# Skip task (пропуск)
+# Check if should delete previous block messages
 if should_delete_previous_task(day_number, task_number, next_task_number):
-    await callback.message.delete()
+    await delete_block_messages(callback, state)
 ```
+
+**Ключевое изменение:** Теперь удаляются **ВСЕ сообщения блока**, а не только последнее!
 
 ## Тестирование
 

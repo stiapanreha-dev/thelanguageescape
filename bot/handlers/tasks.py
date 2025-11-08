@@ -45,6 +45,57 @@ def init_task_service():
     logger.info("Task service initialized")
 
 
+async def save_block_message_id(state: FSMContext, message_id: int, block_id: int):
+    """
+    Save message_id to the current block's message list.
+
+    Args:
+        state: FSM context
+        message_id: Message ID to save
+        block_id: Block ID (or None if no block)
+    """
+    data = await state.get_data()
+    current_block_messages = data.get('current_block_messages', [])
+    current_block_id = data.get('current_block_id')
+
+    # If block changed, reset the list
+    if current_block_id != block_id:
+        current_block_messages = []
+
+    # Add new message_id
+    current_block_messages.append(message_id)
+
+    # Save to state
+    await state.update_data(
+        current_block_messages=current_block_messages,
+        current_block_id=block_id
+    )
+
+
+async def delete_block_messages(callback: CallbackQuery, state: FSMContext):
+    """
+    Delete all messages from the current block.
+
+    Args:
+        callback: Callback query
+        state: FSM context
+    """
+    data = await state.get_data()
+    message_ids = data.get('current_block_messages', [])
+
+    for msg_id in message_ids:
+        try:
+            await callback.bot.delete_message(
+                chat_id=callback.message.chat.id,
+                message_id=msg_id
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete message {msg_id}: {e}")
+
+    # Clear the list
+    await state.update_data(current_block_messages=[], current_block_id=None)
+
+
 def should_delete_previous_task(day_number: int, prev_task_number: int, current_task_number: int) -> bool:
     """
     Check if previous task message should be deleted when transitioning to current task.
@@ -113,7 +164,8 @@ async def show_task(
     session: AsyncSession,
     user_id: int,
     day_number: int,
-    task_number: int
+    task_number: int,
+    state: FSMContext = None
 ):
     """
     Display a specific task
@@ -124,6 +176,7 @@ async def show_task(
         user_id: User telegram ID
         day_number: Day number
         task_number: Task number
+        state: FSM context (optional, for tracking block messages)
     """
     # Get user for name substitution
     result = await session.execute(
@@ -330,7 +383,7 @@ async def show_task(
 
 
 @router.callback_query(F.data.startswith("answer_"))
-async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
+async def callback_answer_task(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     """
     Handle task answer (choice or dialog)
     Format: answer_{day}_{task_number}_{letter}
@@ -471,11 +524,19 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
                 # Auto-transition to next task
                 logger.info(f"Auto-transitioning to task {next_task_number} for user {user_id}")
 
-                # Check if should delete previous task message based on block
-                if should_delete_previous_task(day_number, task_number, next_task_number):
-                    await callback.message.delete()
+                # Get current task block info
+                current_task = course_service.get_task(day_number, task_number)
+                current_block = current_task.get('block') if current_task else None
 
-                await show_task(callback.message, session, user_id, day_number, next_task_number)
+                # Save current message ID to block before potentially deleting
+                if current_block is not None:
+                    await save_block_message_id(state, callback.message.message_id, current_block)
+
+                # Check if should delete previous block messages
+                if should_delete_previous_task(day_number, task_number, next_task_number):
+                    await delete_block_messages(callback, state)
+
+                await show_task(callback.message, session, user_id, day_number, next_task_number, state)
                 await callback.answer("✅ Отлично!")
                 return
 
@@ -576,7 +637,7 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
 
 
 @router.callback_query(F.data.startswith("next_task_"))
-async def callback_next_task(callback: CallbackQuery, session: AsyncSession):
+async def callback_next_task(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     """
     Move to next task
     """
@@ -586,12 +647,20 @@ async def callback_next_task(callback: CallbackQuery, session: AsyncSession):
 
     user_id = callback.from_user.id
 
-    # Check if should delete previous task message based on block
+    # Get current task block info
     prev_task_number = next_task_number - 1
-    if should_delete_previous_task(day_number, prev_task_number, next_task_number):
-        await callback.message.delete()
+    prev_task = course_service.get_task(day_number, prev_task_number)
+    prev_block = prev_task.get('block') if prev_task else None
 
-    await show_task(callback.message, session, user_id, day_number, next_task_number)
+    # Save current message ID to block before potentially deleting
+    if prev_block is not None:
+        await save_block_message_id(state, callback.message.message_id, prev_block)
+
+    # Check if should delete previous block messages
+    if should_delete_previous_task(day_number, prev_task_number, next_task_number):
+        await delete_block_messages(callback, state)
+
+    await show_task(callback.message, session, user_id, day_number, next_task_number, state)
     await callback.answer()
 
 
@@ -612,7 +681,7 @@ async def callback_retry_task(callback: CallbackQuery, session: AsyncSession):
 
 
 @router.callback_query(F.data.startswith("skip_task_"))
-async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
+async def callback_skip_task(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     """
     Skip a task (voice tasks only)
     """
@@ -652,16 +721,20 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
 
     # Move to next task or finish
     if task_number < total_tasks:
-        # Check if should delete previous task message based on block
+        # Get current task block info
+        current_task = course_service.get_task(day_number, task_number)
+        current_block = current_task.get('block') if current_task else None
+
+        # Save current message ID to block before potentially deleting
+        if current_block is not None:
+            await save_block_message_id(state, callback.message.message_id, current_block)
+
+        # Check if should delete previous block messages
         next_task_number = task_number + 1
         if should_delete_previous_task(day_number, task_number, next_task_number):
-            # Try to delete message, but continue even if it fails
-            try:
-                await callback.message.delete()
-            except Exception as e:
-                logger.warning(f"Failed to delete message in skip_task: {e}")
+            await delete_block_messages(callback, state)
 
-        await show_task(callback.message, session, user_id, day_number, next_task_number)
+        await show_task(callback.message, session, user_id, day_number, next_task_number, state)
     else:
         # Last task - finish day manually (can't use callback_finish_day due to frozen callback)
         from bot.database.models import User, TaskResult
