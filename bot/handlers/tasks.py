@@ -134,7 +134,7 @@ def should_delete_previous_task(day_number: int, prev_task_number: int, current_
 
 
 @router.callback_query(F.data.startswith("start_tasks_"))
-async def callback_start_tasks(callback: CallbackQuery, session: AsyncSession):
+async def callback_start_tasks(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     """
     Start tasks for a day
     """
@@ -155,8 +155,11 @@ async def callback_start_tasks(callback: CallbackQuery, session: AsyncSession):
         day_number=day_number
     )
 
+    # Clear block tracking state when starting new day
+    await state.update_data(current_block_messages=[], current_block_id=None)
+
     # Show first task
-    await show_task(callback.message, session, user_id, day_number, 1)
+    await show_task(callback.message, session, user_id, day_number, 1, state)
     await callback.answer()
 
 
@@ -717,7 +720,7 @@ async def callback_next_task(callback: CallbackQuery, session: AsyncSession, sta
 
 
 @router.callback_query(F.data.startswith("retry_task_"))
-async def callback_retry_task(callback: CallbackQuery, session: AsyncSession):
+async def callback_retry_task(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     """
     Retry a task
     """
@@ -728,7 +731,7 @@ async def callback_retry_task(callback: CallbackQuery, session: AsyncSession):
     user_id = callback.from_user.id
 
     await callback.message.delete()
-    await show_task(callback.message, session, user_id, day_number, task_number)
+    await show_task(callback.message, session, user_id, day_number, task_number, state)
     await callback.answer()
 
 
@@ -972,7 +975,7 @@ def validate_text_input(text: str, pattern: str) -> bool:
 
 
 @router.message(F.voice)
-async def handle_voice_message(message: Message, session: AsyncSession):
+async def handle_voice_message(message: Message, session: AsyncSession, state: FSMContext):
     """
     Handle voice message for voice tasks
     Uses Vosk speech recognition to check for "My name is [Name]" phrase
@@ -1224,7 +1227,7 @@ async def handle_voice_message(message: Message, session: AsyncSession):
         next_task_number = voice_task_number + 1
         if voice_task_number < total_tasks:
             # Not last task - transition directly without success message
-            await show_task(message, session, user_id, day_number, next_task_number)
+            await show_task(message, session, user_id, day_number, next_task_number, state)
         else:
             # Last task - show completion with code letter
             keyboard = get_task_result_keyboard(day_number, voice_task_number, total_tasks, True)
