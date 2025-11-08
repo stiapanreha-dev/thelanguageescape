@@ -170,7 +170,7 @@ async def show_task(
     day_number: int,
     task_number: int,
     state: FSMContext = None
-):
+) -> Message:
     """
     Display a specific task
 
@@ -181,6 +181,9 @@ async def show_task(
         day_number: Day number
         task_number: Task number
         state: FSM context (optional, for tracking block messages)
+
+    Returns:
+        Sent message object
     """
     # Get user for name substitution
     result = await session.execute(
@@ -545,20 +548,12 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession, s
             # Not last task - auto-transition without showing success message
             logger.info(f"Auto-transitioning to task {next_task_number} for user {user_id}")
 
-            # Get current task block info
-            current_task = course_service.get_task(day_number, task_number)
-            current_block = current_task.get('block') if current_task else None
-
-            # If no block specified, use unique task ID (each task = separate block)
-            if current_block is None:
-                current_block = f"task_{day_number}_{task_number}"
-
-            # Save current message ID to block
-            await save_block_message_id(state, callback.message.message_id, current_block)
-
-            # Check if should delete previous block messages
+            # Delete current task message if transitioning to different block
             if should_delete_previous_task(day_number, task_number, next_task_number):
-                await delete_block_messages(callback, state)
+                try:
+                    await callback.message.delete()
+                except Exception as e:
+                    logger.warning(f"Failed to delete message: {e}")
 
             await show_task(callback.message, session, user_id, day_number, next_task_number, state)
             await callback.answer("✅")
@@ -671,21 +666,13 @@ async def callback_next_task(callback: CallbackQuery, session: AsyncSession, sta
 
     user_id = callback.from_user.id
 
-    # Get current task block info
+    # Delete current task message if transitioning to different block
     prev_task_number = next_task_number - 1
-    prev_task = course_service.get_task(day_number, prev_task_number)
-    prev_block = prev_task.get('block') if prev_task else None
-
-    # If no block specified, use unique task ID (each task = separate block)
-    if prev_block is None:
-        prev_block = f"task_{day_number}_{prev_task_number}"
-
-    # Save current message ID to block before potentially deleting
-    await save_block_message_id(state, callback.message.message_id, prev_block)
-
-    # Check if should delete previous block messages
     if should_delete_previous_task(day_number, prev_task_number, next_task_number):
-        await delete_block_messages(callback, state)
+        try:
+            await callback.message.delete()
+        except Exception as e:
+            logger.warning(f"Failed to delete message: {e}")
 
     await show_task(callback.message, session, user_id, day_number, next_task_number, state)
     await callback.answer()
@@ -752,21 +739,13 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession, sta
 
     # Move to next task or finish
     if task_number < total_tasks:
-        # Get current task block info
-        current_task = course_service.get_task(day_number, task_number)
-        current_block = current_task.get('block') if current_task else None
-
-        # If no block specified, use unique task ID (each task = separate block)
-        if current_block is None:
-            current_block = f"task_{day_number}_{task_number}"
-
-        # Save current message ID to block before potentially deleting
-        await save_block_message_id(state, callback.message.message_id, current_block)
-
-        # Check if should delete previous block messages
+        # Delete current task message if transitioning to different block
         next_task_number = task_number + 1
         if should_delete_previous_task(day_number, task_number, next_task_number):
-            await delete_block_messages(callback, state)
+            try:
+                await callback.message.delete()
+            except Exception as e:
+                logger.warning(f"Failed to delete message: {e}")
 
         await show_task(callback.message, session, user_id, day_number, next_task_number, state)
     else:
