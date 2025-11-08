@@ -45,6 +45,42 @@ def init_task_service():
     logger.info("Task service initialized")
 
 
+def should_delete_previous_task(day_number: int, prev_task_number: int, current_task_number: int) -> bool:
+    """
+    Check if previous task message should be deleted when transitioning to current task.
+
+    Logic:
+    - If previous or current task has no 'block' field → delete (different blocks)
+    - If both have 'block' field with same value → don't delete (same block)
+    - If both have 'block' field with different values → delete (different blocks)
+
+    Args:
+        day_number: Day number
+        prev_task_number: Previous task number
+        current_task_number: Current task number
+
+    Returns:
+        True if should delete, False otherwise
+    """
+    # Get both tasks data
+    prev_task = course_service.get_task(day_number, prev_task_number)
+    current_task = course_service.get_task(day_number, current_task_number)
+
+    if not prev_task or not current_task:
+        return True  # Delete by default if task not found
+
+    # Get block values (None if not specified)
+    prev_block = prev_task.get('block')
+    current_block = current_task.get('block')
+
+    # If either task has no block → delete (different blocks)
+    if prev_block is None or current_block is None:
+        return True
+
+    # If both have blocks → delete only if different
+    return prev_block != current_block
+
+
 @router.callback_query(F.data.startswith("start_tasks_"))
 async def callback_start_tasks(callback: CallbackQuery, session: AsyncSession):
     """
@@ -434,7 +470,11 @@ async def callback_answer_task(callback: CallbackQuery, session: AsyncSession):
             if should_auto_transition:
                 # Auto-transition to next task
                 logger.info(f"Auto-transitioning to task {next_task_number} for user {user_id}")
-                await callback.message.delete()
+
+                # Check if should delete previous task message based on block
+                if should_delete_previous_task(day_number, task_number, next_task_number):
+                    await callback.message.delete()
+
                 await show_task(callback.message, session, user_id, day_number, next_task_number)
                 await callback.answer("✅ Отлично!")
                 return
@@ -546,7 +586,11 @@ async def callback_next_task(callback: CallbackQuery, session: AsyncSession):
 
     user_id = callback.from_user.id
 
-    await callback.message.delete()
+    # Check if should delete previous task message based on block
+    prev_task_number = next_task_number - 1
+    if should_delete_previous_task(day_number, prev_task_number, next_task_number):
+        await callback.message.delete()
+
     await show_task(callback.message, session, user_id, day_number, next_task_number)
     await callback.answer()
 
@@ -608,13 +652,16 @@ async def callback_skip_task(callback: CallbackQuery, session: AsyncSession):
 
     # Move to next task or finish
     if task_number < total_tasks:
-        # Try to delete message, but continue even if it fails
-        try:
-            await callback.message.delete()
-        except Exception as e:
-            logger.warning(f"Failed to delete message in skip_task: {e}")
+        # Check if should delete previous task message based on block
+        next_task_number = task_number + 1
+        if should_delete_previous_task(day_number, task_number, next_task_number):
+            # Try to delete message, but continue even if it fails
+            try:
+                await callback.message.delete()
+            except Exception as e:
+                logger.warning(f"Failed to delete message in skip_task: {e}")
 
-        await show_task(callback.message, session, user_id, day_number, task_number + 1)
+        await show_task(callback.message, session, user_id, day_number, next_task_number)
     else:
         # Last task - finish day manually (can't use callback_finish_day due to frozen callback)
         from bot.database.models import User, TaskResult

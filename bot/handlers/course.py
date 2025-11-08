@@ -616,7 +616,7 @@ async def generate_and_send_certificate(
 """,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📢 Присоединиться к каналу", url="https://t.me/language_escape")],
+                [InlineKeyboardButton(text="📢 Присоединиться к каналу", url="https://t.me/languageescape")],
             ])
         )
 

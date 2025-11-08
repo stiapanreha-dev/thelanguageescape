@@ -345,7 +345,7 @@ def get_certificate_keyboard(certificate_url: str = None) -> InlineKeyboardMarku
     keyboard_rows.append([
         InlineKeyboardButton(
             text="📢 Наш канал",
-            url="https://t.me/language_escape"  # Update with real channel
+            url="https://t.me/languageescape"
         )
     ])
 
