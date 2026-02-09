@@ -10,7 +10,10 @@ from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from bot.config import THEME_MESSAGES, COURSE_DAYS, MATERIALS_PATH
+from bot.database.models import Material
 from bot.services.course import course_service
 from bot.keyboards.inline import (
     get_day_keyboard,
@@ -22,6 +25,29 @@ from bot.keyboards.inline import (
 logger = logging.getLogger(__name__)
 
 router = Router(name="course")
+
+
+async def get_cached_file_id(session: AsyncSession, day_number: int, material_type: str) -> str | None:
+    """Получить кэшированный file_id из таблицы materials"""
+    result = await session.execute(
+        select(Material.file_id).where(
+            Material.day_number == day_number,
+            Material.material_type == material_type
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def cache_file_id(session: AsyncSession, day_number: int, material_type: str, file_id: str, file_path: str = None):
+    """Сохранить file_id в таблицу materials"""
+    material = Material(
+        day_number=day_number,
+        material_type=material_type,
+        file_id=file_id,
+        file_path=file_path
+    )
+    session.add(material)
+    await session.commit()
 
 
 @router.message(Command("day"))
@@ -83,7 +109,6 @@ async def show_day(
     # Get user's name from Day 1 voice task (for personalization after completing it)
     user_name = "Субъект X"
     from bot.database.models import TaskResult, User
-    from sqlalchemy import select
 
     # First, get internal user id from users table
     user_result = await session.execute(
@@ -159,7 +184,6 @@ async def callback_start_day(callback: CallbackQuery, session: AsyncSession):
     if day_number >= 2:
         from aiogram.types import FSInputFile
         from bot.database.models import User, TaskResult
-        from sqlalchemy import select
         import os
 
         # Get user's name from Day 1 voice task
@@ -226,69 +250,93 @@ async def callback_locked_day(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("watch_video_"))
 async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
     """
-    Send day's video to user
+    Send day's video to user (with file_id caching for instant re-sends)
     """
-    bot = callback.bot  # Get bot from callback
+    bot = callback.bot
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
 
-    # Get video path
-    video_path = course_service.get_day_video_path(day_number)
+    # Create keyboard for video
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    video_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📄 Читать брифинг",
+            callback_data=f"read_brief_{day_number}"
+        )],
+        [InlineKeyboardButton(
+            text="✅ Начать задания",
+            callback_data=f"start_tasks_{day_number}"
+        )]
+    ])
 
-    if not video_path:
-        await callback.answer("❌ Video not available for this day", show_alert=True)
-        return
+    caption = f"Day {day_number}: {course_service.get_day_title(day_number)}"
 
-    # Send video
     try:
-        # Resolve path relative to MATERIALS_PATH
-        full_path = MATERIALS_PATH / video_path
-        if not full_path.exists():
-            await callback.answer("❌ Video file not found", show_alert=True)
-            logger.error(f"Video file not found: {full_path}")
-            return
+        # Check cache first
+        cached_id = await get_cached_file_id(session, day_number, "video")
 
-        # Check file size (Telegram limit: 50MB for videos)
-        file_size = full_path.stat().st_size
-        if file_size > 50 * 1024 * 1024:  # 50MB in bytes
-            await callback.answer("❌ Video file too large (>50MB)", show_alert=True)
-            logger.error(f"Video file too large: {file_size} bytes")
-            return
+        if cached_id:
+            # Instant send via cached file_id
+            await callback.message.answer(
+                f"🎬 **Видео Дня {day_number}**\n\nСмотри внимательно, ищи подсказки...",
+                parse_mode="Markdown"
+            )
+            await bot.send_video(
+                chat_id=chat_id,
+                video=cached_id,
+                caption=caption,
+                reply_markup=video_keyboard
+            )
+            logger.info(f"✅ Video sent from cache to user {user_id} for day {day_number}")
+        else:
+            # First upload — need file from disk
+            video_path = course_service.get_day_video_path(day_number)
+            if not video_path:
+                await callback.answer("❌ Video not available for this day", show_alert=True)
+                return
 
-        await callback.message.answer(
-            f"🎬 **Видео Дня {day_number}**\n\nСмотри внимательно, ищи подсказки...",
-            parse_mode="Markdown"
-        )
+            full_path = MATERIALS_PATH / video_path
+            if not full_path.exists():
+                await callback.answer("❌ Video file not found", show_alert=True)
+                logger.error(f"Video file not found: {full_path}")
+                return
 
-        # Create keyboard for video
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        video_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="📄 Читать брифинг",
-                callback_data=f"read_brief_{day_number}"
-            )],
-            [InlineKeyboardButton(
-                text="✅ Начать задания",
-                callback_data=f"start_tasks_{day_number}"
-            )]
-        ])
+            file_size = full_path.stat().st_size
+            if file_size > 50 * 1024 * 1024:
+                await callback.answer("❌ Video file too large (>50MB)", show_alert=True)
+                logger.error(f"Video file too large: {file_size} bytes")
+                return
 
-        video_file = FSInputFile(str(full_path))
-        await bot.send_video(
-            chat_id=chat_id,
-            video=video_file,
-            caption=f"Day {day_number}: {course_service.get_day_title(day_number)}",
-            width=1920,
-            height=1080,
-            reply_markup=video_keyboard
-        )
+            await callback.message.answer(
+                f"🎬 **Видео Дня {day_number}**\n\nСмотри внимательно, ищи подсказки...",
+                parse_mode="Markdown"
+            )
+
+            loading_msg = await callback.message.answer("⏳ Загружаю видео, подожди немного...")
+
+            video_file = FSInputFile(str(full_path))
+            sent = await bot.send_video(
+                chat_id=chat_id,
+                video=video_file,
+                caption=caption,
+                width=1920,
+                height=1080,
+                reply_markup=video_keyboard,
+                request_timeout=300
+            )
+
+            # Cache file_id for future instant sends
+            if sent.video:
+                await cache_file_id(session, day_number, "video", sent.video.file_id, str(video_path))
+                logger.info(f"✅ Cached video file_id for day {day_number}")
+
+            await loading_msg.delete()
+            logger.info(f"✅ Video uploaded and sent to user {user_id} for day {day_number}")
 
         # Mark as watched
         await course_service.mark_video_watched(session, user_id, day_number)
-
         await callback.answer("✅ Video sent!")
-        logger.info(f"✅ Video sent to user {user_id} for day {day_number}")
 
     except FileNotFoundError as e:
         logger.error(f"Video file not found for day {day_number}: {e}")
@@ -304,63 +352,87 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data.startswith("read_brief_"))
 async def callback_read_brief(callback: CallbackQuery, session: AsyncSession):
     """
-    Send day's PDF brief to user
+    Send day's PDF brief to user (with file_id caching for instant re-sends)
     """
-    bot = callback.bot  # Get bot from callback
+    bot = callback.bot
     day_number = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
 
-    # Get brief path
-    brief_path = course_service.get_day_brief_path(day_number)
+    # Create keyboard for brief
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    brief_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✅ Начать задания",
+            callback_data=f"start_tasks_{day_number}"
+        )]
+    ])
 
-    if not brief_path:
-        await callback.answer("❌ Brief not available for this day", show_alert=True)
-        return
+    caption = f"Day {day_number}: {course_service.get_day_title(day_number)}"
 
-    # Send PDF
     try:
-        # Resolve path relative to MATERIALS_PATH
-        full_path = MATERIALS_PATH / brief_path
-        if not full_path.exists():
-            await callback.answer("❌ Brief file not found", show_alert=True)
-            logger.error(f"Brief file not found: {full_path}")
-            return
+        # Check cache first
+        cached_id = await get_cached_file_id(session, day_number, "brief")
 
-        # Check file size (Telegram limit: 50MB for documents)
-        file_size = full_path.stat().st_size
-        if file_size > 50 * 1024 * 1024:  # 50MB in bytes
-            await callback.answer("❌ Brief file too large (>50MB)", show_alert=True)
-            logger.error(f"Brief file too large: {file_size} bytes")
-            return
+        if cached_id:
+            # Instant send via cached file_id
+            await callback.message.answer(
+                f"📄 **Брифинг Дня {day_number}**\n\nЧитай внимательно и учись!",
+                parse_mode="Markdown"
+            )
+            await bot.send_document(
+                chat_id=chat_id,
+                document=cached_id,
+                caption=caption,
+                reply_markup=brief_keyboard
+            )
+            logger.info(f"✅ Brief sent from cache to user {user_id} for day {day_number}")
+        else:
+            # First upload — need file from disk
+            brief_path = course_service.get_day_brief_path(day_number)
+            if not brief_path:
+                await callback.answer("❌ Brief not available for this day", show_alert=True)
+                return
 
-        await callback.message.answer(
-            f"📄 **Брифинг Дня {day_number}**\n\nЧитай внимательно и учись!",
-            parse_mode="Markdown"
-        )
+            full_path = MATERIALS_PATH / brief_path
+            if not full_path.exists():
+                await callback.answer("❌ Brief file not found", show_alert=True)
+                logger.error(f"Brief file not found: {full_path}")
+                return
 
-        # Create keyboard for brief
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        brief_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="✅ Начать задания",
-                callback_data=f"start_tasks_{day_number}"
-            )]
-        ])
+            file_size = full_path.stat().st_size
+            if file_size > 50 * 1024 * 1024:
+                await callback.answer("❌ Brief file too large (>50MB)", show_alert=True)
+                logger.error(f"Brief file too large: {file_size} bytes")
+                return
 
-        brief_file = FSInputFile(str(full_path))
-        await bot.send_document(
-            chat_id=chat_id,
-            document=brief_file,
-            caption=f"Day {day_number}: {course_service.get_day_title(day_number)}",
-            reply_markup=brief_keyboard
-        )
+            await callback.message.answer(
+                f"📄 **Брифинг Дня {day_number}**\n\nЧитай внимательно и учись!",
+                parse_mode="Markdown"
+            )
+
+            loading_msg = await callback.message.answer("⏳ Загружаю брифинг, подожди немного...")
+
+            brief_file = FSInputFile(str(full_path))
+            sent = await bot.send_document(
+                chat_id=chat_id,
+                document=brief_file,
+                caption=caption,
+                reply_markup=brief_keyboard,
+                request_timeout=300
+            )
+
+            # Cache file_id for future instant sends
+            if sent.document:
+                await cache_file_id(session, day_number, "brief", sent.document.file_id, str(brief_path))
+                logger.info(f"✅ Cached brief file_id for day {day_number}")
+
+            await loading_msg.delete()
+            logger.info(f"✅ Brief uploaded and sent to user {user_id} for day {day_number}")
 
         # Mark as read
         await course_service.mark_brief_read(session, user_id, day_number)
-
         await callback.answer("✅ Brief sent!")
-        logger.info(f"✅ Brief sent to user {user_id} for day {day_number}")
 
     except FileNotFoundError as e:
         logger.error(f"Brief file not found for day {day_number}: {e}")
@@ -464,7 +536,6 @@ async def callback_finish_day(callback: CallbackQuery, session: AsyncSession):
     # Get user's name from Day 1 voice task
     user_name = "Субъект X"
     from bot.database.models import User, TaskResult
-    from sqlalchemy import select
 
     # Get internal user id
     user_result = await session.execute(
@@ -555,7 +626,6 @@ async def generate_and_send_certificate(
     """
     from bot.services.certificates import generate_user_certificate
     from bot.database.models import Certificate, User
-    from sqlalchemy import select
 
     try:
         # Get user progress data
