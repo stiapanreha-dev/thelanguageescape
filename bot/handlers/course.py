@@ -336,7 +336,10 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
 
         # Mark as watched
         await course_service.mark_video_watched(session, user_id, day_number)
-        await callback.answer("✅ Video sent!")
+        try:
+            await callback.answer("✅ Video sent!")
+        except Exception:
+            pass  # callback query expired after long upload — video was sent OK
 
     except FileNotFoundError as e:
         logger.error(f"Video file not found for day {day_number}: {e}")
@@ -346,7 +349,10 @@ async def callback_watch_video(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ Cannot access video file", show_alert=True)
     except Exception as e:
         logger.error(f"Error sending video to user {user_id}, day {day_number}: {e}", exc_info=True)
-        await callback.answer("❌ Error sending video. Please try again later.", show_alert=True)
+        try:
+            await callback.answer("❌ Error sending video. Please try again later.", show_alert=True)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.startswith("read_brief_"))
@@ -432,7 +438,10 @@ async def callback_read_brief(callback: CallbackQuery, session: AsyncSession):
 
         # Mark as read
         await course_service.mark_brief_read(session, user_id, day_number)
-        await callback.answer("✅ Brief sent!")
+        try:
+            await callback.answer("✅ Brief sent!")
+        except Exception:
+            pass  # callback query expired after long upload — brief was sent OK
 
     except FileNotFoundError as e:
         logger.error(f"Brief file not found for day {day_number}: {e}")
@@ -442,7 +451,10 @@ async def callback_read_brief(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("❌ Cannot access brief file", show_alert=True)
     except Exception as e:
         logger.error(f"Error sending brief to user {user_id}, day {day_number}: {e}", exc_info=True)
-        await callback.answer("❌ Error sending brief. Please try again later.", show_alert=True)
+        try:
+            await callback.answer("❌ Error sending brief. Please try again later.", show_alert=True)
+        except Exception:
+            pass
 
 
 @router.message(Command("progress"))
